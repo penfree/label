@@ -1,0 +1,7 @@
+sections:
+    - name: mongodb
+      value:
+        type: mongodb
+        config:
+            uri: "mongodb://mongo0.dev-bdmd.com:27015"
+

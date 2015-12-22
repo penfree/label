@@ -54,7 +54,7 @@ def main():
         logging.basicConfig(format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s', level = logging.INFO)
     # Load config
     config_file = searchFile(args.config, [ os.path.join(os.path.dirname(os.path.abspath(__file__)), 'configs') ], False)
-    if not configSchemaFile:
+    if not config_file:
         logger.error('Config schema file [%s] not found', args.config)
         return 1
     configs = ConfigRepository()

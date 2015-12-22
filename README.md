@@ -1,2 +1,3 @@
-# view
-The micro view service
+# label
+
+标注平台,诊断归一化/检验项目归一化

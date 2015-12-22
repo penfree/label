@@ -72,7 +72,8 @@ class DiagnosisService(ServiceBase):
         '''
         groups = self.diag_manager.getLabelInfo(key)
         result = {
-            'groups' : [ group.dump() for group in groups ]
+            'key' : key,
+            'groups' : groups
         }
         return result
 
@@ -84,11 +85,13 @@ class DiagnosisService(ServiceBase):
             @param diag: 诊断
             @param gid: 诊断分组id
         '''
-        ret = 0
         with self.getMongodb() as client:
             ret = self.mark(diag, gid, client)
+
+        groups = self.diag_manager.getLabelInfo(key)
         result = {
-            'ret_code' : ret        
+            'key' : key,
+            'groups' : groups
         }
         return result
 

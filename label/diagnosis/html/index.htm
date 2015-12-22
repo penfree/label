@@ -47,8 +47,8 @@
           </ul>
         </div>
         <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
-          <h1 class="page-header">Dashboard</h1>
-
+            <h1 class="page-header"><span id='curr_diagnosis'>Dashboard</span></h1>
+            <ul id="cand_group_list"></ul>
         </div>
       </div>
     </div>
@@ -59,14 +59,88 @@
     <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
     <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
     <script>
-        $apiserver = 'http://dev1.jd-bdmd.com:18001';
-        $all_diagnosis = {}
+        var apiserver = 'http://dev1.jd-bdmd.com:18001';
+        var all_diagnosis = [];
+        function initGroup(data)
+        {
+            var groups = data['value']['groups'];
+            $("#curr_diagnosis").text(data['value']['key']);
+            htmlobj = ''
+            for (var i = 0; i < groups.length; i++)
+            {
+                htmlobj += '<li>';
+                htmlobj += '  <div class="panel panel-info">';
+                htmlobj += '    <div class="panel-heading">';
+                htmlobj += '      <h3 class="panel-title">' +groups[i]['diagnosis'] ;
+                if (groups[i]['marked'])
+                {
+                    htmlobj += ' <span class="label label-primary">已标注</span>';
+                }
+                else
+                {
+                    htmlobj += '<span class="label label-info mark_group" id="' + groups[i]['id'] + '">标记</span>';
+                }
+                htmlobj += '    </h3></div>';
+                htmlobj += '  <div class="panel-body"> ' + groups[i]['items'].join(', ') +'  </div>';
+                htmlobj += '  </div></li>';
+            }
+            $('#cand_group_list').html(htmlobj);        
+            $('.mark_group').click(function(){
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/diagnosis/mark',  
+                     data: {'gid' : this.id, 'diag' : $('#curr_diagnosis').text()},
+                     dataType: "json",  
+                     success: function(data){  
+                        initGroup(data);                    
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                 }); 
+                    
+            })
+        }
+        function initNav() {
+            htmlobj = '';
+            for (var i = 0; i < all_diagnosis.length; i++)
+            {
+                htmlobj += '<li class="diag_nav"><a href="#">'+ all_diagnosis[i] + '</a></li>';
+            }
+            $('#diaglist').html(htmlobj);
+            $('.diag_nav').click(function(){
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/diagnosis/info',  
+                     data: {'key' : this.innerText},
+                     dataType: "json",  
+                     success: function(data){  
+                        initGroup(data);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                })
+            })
+        }
         $(document).ready(function(){
-                $.getJSON($apiserver + '/diagnosis', {'type' : 'not_labeled'}, 
-                    function(req){
-                        $all_diagnosis = req['value'];
-                        alert($all_diagnosis);
-                    })    
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/diagnosis',  
+                 data: {'type' : 'all'},
+                 dataType: "json",  
+                 success: function(data){  
+                    all_diagnosis = data['value']['not_labeled'];
+                    initNav();
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+             }); 
           });
     </script>
   </body>

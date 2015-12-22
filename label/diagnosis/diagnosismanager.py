@@ -163,6 +163,18 @@ class DiagnosisManager(object):
                 group_list.append(group)
             if len(group_list) >= 20:
                 break
-        return group_list
+        groups = group_list
+        marked_group = self.marked_diagnosis.get(diagnosis)
+        if marked_group:
+            new_group = [marked_group.dump()]
+            new_group[0]['marked'] = True
+            for group in groups:
+                if group.id == marked_group.id:
+                    continue
+                new_group.append(group.dump())
+            groups = new_group
+        else:
+            groups = [ group.dump() for group in groups ]
+        return groups
 
 

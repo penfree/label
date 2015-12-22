@@ -29,6 +29,7 @@ from unifiedrpc.content.container import APIContentContainer
 from unifiedrpc.adapters.web import GeventWebAdapter
 
 from argparse import ArgumentParser
+from unifiedrpc import context
 
 from diagnosis.service import DiagnosisService
 

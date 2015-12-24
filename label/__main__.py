@@ -44,6 +44,18 @@ def getArguments():
     # Done
     return parser.parse_args()
 
+def initResponse(self, context):
+    """Initialize the response
+    Parameters:
+        context                             The Context object
+    Returns:
+        Nothing
+    """
+    context.response.mimeType = self.getResponseMimeType(context)
+    context.response.encoding = self.getResponseEncoding(context)
+    context.response.container = self.getResponseContainer(context)
+    context.response.headers['Access-Control-Allow-Origin'] = '*'
+
 def main():
     """The main entry
     """
@@ -61,6 +73,7 @@ def main():
     configs = ConfigRepository()
     configs.loadSchema(config_file)
     # Create the server
+    Server.initResponse = initResponse
     server = Server(**{
         CONFIG_RESPONSE_MIMETYPE: mime.APPLICATION_JSON,
         CONFIG_RESPONSE_CONTENT_CONTAINER: APIContentContainer

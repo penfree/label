@@ -56,12 +56,12 @@ class DiagnosisService(ServiceBase):
 
     @get('/diagnosis')
     @endpoint()
-    def getDiagnosis(self, type = 'all'):
+    def getDiagnosis(self, type = 'all', source = 'all'):
         '''
             get diagnosis to be label
             @param type: all | labeled | not_labeled
         '''
-        return self.diag_manager.getDiagnosis(type)
+        return self.diag_manager.getDiagnosis(type, source)
 
     @get('/diagnosis/info')
     @endpoint()
@@ -70,29 +70,21 @@ class DiagnosisService(ServiceBase):
             获取一个诊断的标注信息, 即已标注信息和候选集合
             @param key: 诊断名称
         '''
-        groups = self.diag_manager.getLabelInfo(key)
-        result = {
-            'key' : key,
-            'groups' : groups
-        }
+        result = self.diag_manager.getLabelInfo(key)
         return result
 
     @get('/diagnosis/mark')
     @endpoint()
-    def mark(self, diag, gid):
+    def mark(self, diag, gid = None, syn_diag = None):
         '''
             标记诊断所属group
             @param diag: 诊断
             @param gid: 诊断分组id
         '''
         with self.getMongodb() as client:
-            ret = self.mark(diag, gid, client)
+            ret = self.diag_manager.mark(diag, gid, syn_diag, client)
 
-        groups = self.diag_manager.getLabelInfo(key)
-        result = {
-            'key' : key,
-            'groups' : groups
-        }
+        result = self.diag_manager.getLabelInfo(diag)
         return result
 
     @get('/diagnosis/markgroup')
@@ -107,3 +99,11 @@ class DiagnosisService(ServiceBase):
             ret = self.diag_manager.markGroup(gid, name, client)
             return {'ret_code' : ret}
 
+    @get('/diagnosis/delete')
+    @endpoint()
+    def delete(self, key):
+        '''
+            删除诊断,此诊断需要清洗或者不需要标注
+        '''
+        with self.getMongodb() as client:
+            self.diag_manager.delete(key, client)

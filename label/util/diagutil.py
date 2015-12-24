@@ -41,21 +41,18 @@ class DiagUtil(object):
                 collection.replace_one({'_id' : gid}, obj, upsert = True)
                 gid += 1
 
-    def addLabelData(self, data_file):
+    def addLabelData(self, data_file, source):
         collection = self.client['label']['diagnosis']
         with open(data_file) as df:
             for line in df:
                 words = line.strip().split('\t')
-                diagnosis = words[0]
+                diagnosis = words[0].strip()
                 if len(words) > 1:
                     count = string.atoi(words[1])
                     if count < 30:
                         continue
                 obj = {'_id' : diagnosis}
-                try:
-                    collection.insert_one(obj)
-                except:
-                    continue
+                collection.update_one( { '_id': diagnosis }, { '$addToSet': { 'source': source }}, upsert = True); 
 
 
 def getArguments():
@@ -66,6 +63,7 @@ def getArguments():
     parser.add_argument('--port', dest = 'port', type = int, default = 27015, help = 'The mongodb port')
     parser.add_argument('--file', '-f', dest = 'file', required = True, help = '')
     parser.add_argument('--cmd', '-c', dest = 'cmd',required = True)
+    parser.add_argument('--source', '-s', dest = 'source')
     # Done
     return parser.parse_args()
 
@@ -77,6 +75,8 @@ if __name__=='__main__':
     if args.cmd == 'init':
         tool.init(args.file)
     elif args.cmd == 'label':
-        tool.addLabelData(args.file)
+        if not args.source:
+            raise ValueError('source must be specified')
+        tool.addLabelData(args.file, args.source)
     elif args.cmd == 'gen_dict':
         tool.genDict(args.file)

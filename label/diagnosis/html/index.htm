@@ -32,9 +32,23 @@
           <a class="navbar-brand" href="#">诊断归一化</a>
         </div>
         <div id="navbar" class="navbar-collapse collapse">
-          <form class="navbar-form navbar-right">
-            <input type="text" class="form-control" placeholder="Search...">
-          </form>
+          <ul class="nav navbar-nav navbar-right">
+              <li><a href="#" id="btn_refresh">刷新</a></li>
+              <li><a  href="#" id="lbl_stat"></a></li>
+            <li class="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">医院<span class="caret"></span></a>
+              <ul class="dropdown-menu hosp-alias">
+                <li class="active" ><a href="#">all</a></li>
+                <li><a href="#">xiangya1</a></li>
+                <li><a href="#">gyfyy</a></li>
+              </ul>
+            </li>
+            <li>
+                <div class="navbar-form">
+                    <input type="text" class="form-control" placeholder="Search..." id="search">
+                </div>
+            </li>
+          </ul>
         </div>
       </div>
     </nav>
@@ -43,12 +57,29 @@
       <div class="row">
         <div class="col-sm-3 col-md-2 sidebar">
           <ul class="nav nav-sidebar" id="diaglist">
-            <li class="active"><a href="#">Overview <span class="sr-only">(current)</span></a></li>
           </ul>
         </div>
         <div class="col-sm-9 col-sm-offset-3 col-md-10 col-md-offset-2 main">
-            <h1 class="page-header"><span id='curr_diagnosis'>Dashboard</span></h1>
-            <ul id="cand_group_list"></ul>
+            <h1 class="page-header">
+            <div id="navbar" class="navbar-collapse collapse">
+              <ul class="nav navbar-nav">
+                  <li>  
+                        <span id='curr_diagnosis'></span>
+                  </li>
+                  <li>
+                        <small id="curr_diagnosis_info"></small>
+                  </li>
+                  <li>
+                    <div class = "navbar-form">
+                        <input type="text" class="form-control" placeholder="诊断名,为空则独立成组" id="specified_group">
+                        <button type="button" class="btn btm-lg btn-info" id='join_group'>加入组</button>
+                        <button type="button" class="btn btm-lg btn-info" id='btn_del'>删除</button>
+                    </div>
+                </li>
+              </ul>
+            </div>
+            </h1>
+            <ul class='list-unstyled' id="cand_group_list"></ul>
         </div>
       </div>
     </div>
@@ -60,31 +91,63 @@
     <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
     <script>
         var apiserver = 'http://dev1.jd-bdmd.com:18001';
-        var all_diagnosis = [];
+        var all_diagnosis = new Array();
+        function setMarked(diag){
+            $(".diag_nav :contains(" + diag + ")").each(
+                function (){
+                    if ($(this).text() == diag)
+                    {
+                        $(this).addClass("btn-info");
+                    }
+                }
+            );
+        }
+        function delDiagnosis(diag){
+            $(".diag_nav :contains(" + diag + ")").each(
+                function (){
+                    if ($(this).text() == diag)
+                    {
+                        $(this).remove();
+                    }
+                }
+            );
+        }
         function initGroup(data)
         {
             var groups = data['value']['groups'];
-            $("#curr_diagnosis").text(data['value']['key']);
+            var curr_diag = data['value']['key'];
+            $("#curr_diagnosis").text(curr_diag);
+            $("#curr_diagnosis_info").html("");
+            for (var i = 0; i < data['value']['source'].length; i++){
+                $("#curr_diagnosis_info").append('<span class="label label-warning">'+ data['value']['source'][i] +'</span>');
+            }
             htmlobj = ''
             for (var i = 0; i < groups.length; i++)
             {
                 htmlobj += '<li>';
-                htmlobj += '  <div class="panel panel-info">';
+                htmlobj += '  <div class="panel panel-warning">';
                 htmlobj += '    <div class="panel-heading">';
                 htmlobj += '      <h3 class="panel-title">' +groups[i]['diagnosis'] ;
                 if (groups[i]['marked'])
                 {
-                    htmlobj += ' <span class="label label-primary">已标注</span>';
+                    htmlobj += '<button type="button" class="btn btm-sm btn-success">已标记</button>';
                 }
                 else
                 {
-                    htmlobj += '<span class="label label-info mark_group" id="' + groups[i]['id'] + '">标记</span>';
+                    htmlobj += '<button type="button" class="btn btn-sm btn-info mark_group" id="' + groups[i]['_id'] +'">标记</button>';
                 }
                 htmlobj += '    </h3></div>';
-                htmlobj += '  <div class="panel-body"> ' + groups[i]['items'].join(', ') +'  </div>';
-                htmlobj += '  </div></li>';
+                htmlobj += '  <div class="panel-body"> ';
+                for (var j = 0; j < groups[i]['items'].length; j++)
+                {
+                    htmlobj += '<a class="diag_link" href="#">' + groups[i]['items'][j] + '</a>&nbsp;&nbsp;';
+                }
+                htmlobj += ' </div> </div></li>';
             }
             $('#cand_group_list').html(htmlobj);        
+            $('.diag_link').click(function(){
+                getLabelInfo(this.innerText);
+            })
             $('.mark_group').click(function(){
                  $.ajax({  
                      type: "get",  
@@ -93,6 +156,7 @@
                      data: {'gid' : this.id, 'diag' : $('#curr_diagnosis').text()},
                      dataType: "json",  
                      success: function(data){  
+                        setMarked($('#curr_diagnosis').text());
                         initGroup(data);                    
                      },  
                      error: function(){  
@@ -102,45 +166,143 @@
                     
             })
         }
-        function initNav() {
+        function getLabelInfo(diag){
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/diagnosis/info',  
+                 data: {'key' : diag},
+                 dataType: "json",  
+                 success: function(data){  
+                    initGroup(data);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+                        
+            })
+        }
+        function initNav(diag_list) {
             htmlobj = '';
-            for (var i = 0; i < all_diagnosis.length; i++)
+            for (var i = 0; i < diag_list.length; i++)
             {
-                htmlobj += '<li class="diag_nav"><a href="#">'+ all_diagnosis[i] + '</a></li>';
+                if (diag_list[i]['marked']){
+                    htmlobj += '<li class="diag_nav btn-info"><a href="#">'+ diag_list[i]['_id'] + '</a></li>';
+                }
+                else {
+                    htmlobj += '<li class="diag_nav"><a href="#">'+ diag_list[i]['_id'] + '</a></li>';
+                }
             }
             $('#diaglist').html(htmlobj);
             $('.diag_nav').click(function(){
-                 $.ajax({  
-                     type: "get",  
-                     async: false,  
-                     url: apiserver + '/diagnosis/info',  
-                     data: {'key' : this.innerText},
-                     dataType: "json",  
-                     success: function(data){  
-                        initGroup(data);
-                     },  
-                     error: function(){  
-                         alert('fail');  
-                     }  
-                            
-                })
+                getLabelInfo($(this).text());
             })
         }
-        $(document).ready(function(){
+        function clearRight(){
+            $('#curr_diagnosis').html('');
+            $('#specified_group').html('');
+            $('#cand_group_list').html('');
+            $('#curr_diagnosis_info').html('');
+        }
+        function clearLeft(){
+            $('#diaglist').html('');
+        }
+        function getDiagList(){
+            clearLeft();
+            clearRight();
+            var source = $("ul.hosp-alias > li.active").children("a").text();
              $.ajax({  
                  type: "get",  
                  async: false,  
                  url: apiserver + '/diagnosis',  
-                 data: {'type' : 'all'},
+                 data: {'source' : source},
                  dataType: "json",  
                  success: function(data){  
-                    all_diagnosis = data['value']['not_labeled'];
-                    initNav();
+                    all_diagnosis = data['value'];
+                    var diag_list = new Array();
+                    var labeled = 0;
+                    var not_labeled = 0;
+                    for (var diag in all_diagnosis)
+                    {
+                        if (all_diagnosis[diag]['marked']){
+                            labeled += 1;
+                        }
+                        else{
+                            not_labeled += 1;
+                        }
+                        diag_list.push(all_diagnosis[diag]);
+                    }
+                    $("#lbl_stat").text("已标注(" + labeled + ") 剩余(" + not_labeled + ")");
+                    initNav(diag_list);
                  },  
                  error: function(){  
                      alert('fail');  
                  }  
              }); 
+        }
+        $(document).ready(function(){
+            $('#btn_del').click(function(){
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/diagnosis/delete',  
+                     data: {'key' : $('#curr_diagnosis').text()},
+                     dataType: "json",  
+                     success: function(data){  
+                        delDiagnosis($('#curr_diagnosis').text());
+                        clearRight();
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                 }); 
+                    
+            })
+            $('#btn_refresh').click(function(){
+                getDiagList();    
+            })
+            $('#join_group').click(function(){
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/diagnosis/mark',  
+                     data: {'diag' : $('#curr_diagnosis').text(), 'syn_diag' : $('#specified_group').val()},
+                     dataType: "json",  
+                     success: function(data){  
+                        setMarked($('#curr_diagnosis').text());
+                        initGroup(data);                    
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                 }); 
+                    
+            })
+            $('#search').bind('keypress',function(event){
+                if(event.keyCode == "13")    
+                {
+                     $.ajax({  
+                         type: "get",  
+                         async: false,  
+                         url: apiserver + '/diagnosis/info',  
+                         data: {'key' : this.value},
+                         dataType: "json",  
+                         success: function(data){  
+                            initGroup(data);
+                         },  
+                         error: function(){  
+                             alert('fail');  
+                         }  
+                                
+                    })
+                }
+            });
+            $('ul.hosp-alias > li').click(function (e) {
+                e.preventDefault();
+                $('ul.hosp-alias > li').removeClass('active');
+                $(this).addClass('active');
+                getDiagList();
+            });
           });
     </script>
   </body>

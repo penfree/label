@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="../../favicon.ico">
+
+    <title>药品归一化标注平台</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom styles for this template -->
+    <link href="dashboard.css" rel="stylesheet">
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="//cdn.bootcss.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="//cdn.bootcss.com/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+
+  <body>
+
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="#">药品归一化</a>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+          <ul class="nav navbar-nav navbar-right">
+              <li><a href="#" id="btn_refresh">刷新</a></li>
+              <li><a href="#" id="btn_filter">显示未标注</a></li>
+              <li><a  href="#" id="lbl_stat"></a></li>
+            <li class="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">医院<span class="caret"></span></a>
+              <ul class="dropdown-menu hosp-alias">
+                <li class="active" ><a href="#">all</a></li>
+                <li><a href="#">gyfyy</a></li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-3 col-md-2 sidebar">
+          <ul class="nav nav-sidebar" id="druglist">
+          </ul>
+        </div>
+        <div class="col-sm-6 col-sm-offset-3 col-md-7 col-md-offset-2 main">
+            <div id="navbar" class="navbar-collapse collapse">
+                <span id="curr_drug_code" class="hidden"></span>
+            <ul id="curr_drug" class="nav navbar-nav list-inline"></ul>
+            </div>
+            <ul id="myTab" class="nav nav-tabs">
+               <li class="active" id="li_pname">
+                  <a href="#tab_pname" data-toggle="tab">
+                     商品名
+                  </a>
+               </li>
+               <li id="li_cname"><a href="#tab_cname" data-toggle="tab">通用名</a></li>
+            </ul>
+            <div id="myTabContent" class="tab-content">
+               <div class="tab-pane fade in active" id="tab_pname">
+                  <ul class='list-unstyled' id="cand_pname_list"></ul></ul>
+               </div>
+               <div class="tab-pane fade" id="tab_cname">
+                   <ul class='list-unstyled' id="cand_cname_list"></ul></ul>
+               </div>
+            </div>
+        </div>
+      </div>
+      <div class='sidebar col-sm-3 col-md-3 col-sm-offset-6 col-md-offset-9'> 
+           <h1 class="page-header">wiki</h3>
+           <div id="wiki_div"></div>
+      </div> 
+    </div>
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
+    <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script>
+        var apiserver = 'http://192.168.2.11:18001';
+        function setMarked(drug){
+            $("li.drug_nav :contains('" + drug + "')").map(
+                function (){
+                    if ($(this).text() == drug)
+                    {
+                        $(this).parent().addClass("btn-info");
+                    }
+                }
+            );
+        }
+        function delDiagnosis(drug){
+            $("li.drug_nav :contains('" + drug + "')").map(
+                function (){
+                    if ($(this).text() == drug)
+                    {
+                        $(this).remove();
+                    }
+                }
+            );
+        }
+        function hideLabeled(){
+            $("li.drug_nav.btn-info").hide();
+        }
+        function showAllItem(){
+            $(".drug_nav").show();
+        }
+        function clearRight(){
+            $('#curr_drug').html('');
+            $('#cand_cname_list').html('');
+            $('#cand_pname_list').html('');
+        }
+        function clearLeft(){
+            $('#druglist').html('');
+        }
+
+        function getLabelInfo(drug_code){
+             source = $('ul.hosp-alias > li.active').text();
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/drug/info',  
+                 data: {'key' : drug_code, 'source' : source},
+                 dataType: "json",  
+                 success: function(data){  
+                    initGroup(data['value']);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+                        
+            })
+        }
+        function initWiki(data){
+            $("#wiki_div").html(""); 
+            var htmlobj = "<dl>";
+            for (var key in data){
+                htmlobj += "<dt>" + key + "</dt>";
+                htmlobj += "<dd>" + data[key] + "</dd>";
+            }
+            htmlobj += "</dl>";
+            $("#wiki_div").html(htmlobj);
+        }
+        function initTab(data, container, labeled_name, label_type){
+            container.html("");
+            for (var i = 0; i < data.length; i++)
+            {
+                var htmlobj = '';
+                htmlobj += "<li>";
+                htmlobj += '  <div class="panel panel-warning">';
+                htmlobj += '    <div class="panel-heading">';
+                htmlobj += '      <h3 class="panel-title"><span>' + data[i]['name'] + '</span>';
+                if (data[i]['name'] == labeled_name)
+                {
+                    htmlobj += '<button type="button" class="btn btm-sm btn-success">已标记</button>';
+                }
+                else
+                {
+                    htmlobj += '<button type="button" class="btn btn-sm btn-info mark_' + label_type + '">标记</button>';
+                }
+                htmlobj += '    </h3></div>';
+                htmlobj += '  <div class="panel-body"> ';
+                for (var j = 0; j < data[i]['info'].length; j++)
+                {
+                    htmlobj += '<a class="drug_link" href="#">' + data[i]['info'][j]['pname'] + "</a>, 通用名:" + data[i]['info'][j]['cname'] + ",商品名:" +  data[i]['info'][j]['cnname'] + "</br>";
+                }
+                htmlobj += ' </div> </div></li>';
+                container.append(htmlobj);
+            }
+            $(".drug_link").click(function(e){
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/drug/wiki',  
+                     data: "pname=" + encodeURIComponent($(this).text()),
+                     dataType: "json",  
+                     success: function(data){  
+                        initWiki(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+            
+            });
+            $(".mark_pname").click(function(e){
+                 var source = $("ul.hosp-alias > li.active").children("a").text();
+                 var pname = $(this).parent().children('span').text();
+                 var drug_code =  $("#curr_drug_code").text();
+
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/drug/mark',  
+                     data: "key=" + encodeURIComponent(drug_code) + "&source=" + source + "&pname=" + encodeURIComponent(pname),
+                     dataType: "json",  
+                     success: function(data){  
+                        setMarked($('#curr_drug_code').text());
+                        initGroup(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+                    
+            });
+            $(".mark_cname").click(function(e){
+                 var source = $("ul.hosp-alias > li.active").children("a").text();
+                 var cname = $(this).parent().children('span').text();
+                 var drug_code =  $("#curr_drug_code").text();
+
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/drug/mark',  
+                     data: "key=" + encodeURIComponent(drug_code) + "&source=" + source + "&cname=" + encodeURIComponent(cname),
+                     dataType: "json",  
+                     success: function(data){  
+                        setMarked($('#curr_drug_code').text());
+                        initGroup(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+                    
+            });
+        }
+        function initGroup(data){
+            var label_info = data['label_drug'];
+            var cname_cand = data['cname_cand'];
+            var pname_cand = data['pname_cand'];
+            $("#curr_drug_code").text(label_info['code']);
+            $("#curr_drug").html("");
+            $("#curr_drug").append('<li><strong>药品名称:</strong>' + label_info['drug_name'] + '</li>');
+            for (var key in label_info["data"]){
+                $("#curr_drug").append('<li><strong>' + key + ':</strong>' + label_info['data'][key] + '</li>');
+            }
+            initTab(cname_cand, $("#cand_cname_list"), label_info['cname'], 'cname');
+            initTab(pname_cand, $("#cand_pname_list"), label_info['pname'], 'pname');
+            $('#myTab a[href="#tab_pname"]').tab('show');
+        }
+        function getDrugList(){
+            clearLeft();
+            clearRight();
+            var source = $("ul.hosp-alias > li.active").children("a").text();
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/drug',  
+                 data: {'source' : source},
+                 dataType: "json",  
+                 success: function(data){  
+                    var drug_list = data['value'];
+                    var labeled = 0;
+                    var not_labeled = 0;
+                    for (var i = 0; i < drug_list.length; i++)
+                    {
+                        var marked = false;
+                        if (drug_list[i]['cname'] || drug_list[i]['pname']){
+                            marked = true;
+                        }
+                        if (marked){
+                            labeled += 1;
+                        }
+                        else{
+                            not_labeled += 1;
+                        }
+                    }
+                    $("#lbl_stat").text("已标注(" + labeled + ") 剩余(" + not_labeled + ")");
+                    initNav(drug_list);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+             }); 
+        }
+    
+        function initNav(drug_list) {
+            htmlobj = '';
+            for (var i = 0; i < drug_list.length; i++)
+            {
+                var marked = false;
+                if (drug_list[i]['cname'] || drug_list[i]['pname']){
+                    marked = true;
+                }
+                if (marked){
+                    htmlobj += '<li class="drug_nav btn-info"><span class="hidden">' + drug_list[i]['code'] + '</span><a href="#">'+ drug_list[i]['drug_name'] + '</a></li>';
+                }
+                else {
+                    htmlobj += '<li class="drug_nav"><span class="hidden">' + drug_list[i]['code'] + '</span><a href="#">'+ drug_list[i]['drug_name'] + '</a></li>';
+                }
+            }
+            $('#druglist').html(htmlobj);
+            $('.drug_nav').click(function(){
+                getLabelInfo($(this).children("span").text());
+            })
+        }
+
+        $(document).ready(function(){
+            $('ul.hosp-alias > li').click(function (e) {
+                e.preventDefault();
+                $('ul.hosp-alias > li').removeClass('active');
+                $(this).addClass('active');
+                getDrugList();
+            });
+            $('#btn_filter').click(function(){
+                if ($(this).text() == "显示未标注"){
+                    hideLabeled();
+                    $(this).text("显示全部");
+                }        
+                else{
+                    showAllItem();
+                    $(this).text("显示未标注");
+                }
+            });
+            $('#btn_refresh').click(function(){
+                getDrugList();    
+            })
+        });
+    </script>
+  </body>
+</html>

@@ -34,6 +34,7 @@
         <div id="navbar" class="navbar-collapse collapse">
           <ul class="nav navbar-nav navbar-right">
               <li><a href="#" id="btn_refresh">刷新</a></li>
+              <li><a href="#" id="btn_filter">显示未标注</a></li>
               <li><a  href="#" id="lbl_stat"></a></li>
             <li class="dropdown">
               <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">医院<span class="caret"></span></a>
@@ -90,20 +91,20 @@
     <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
     <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
     <script>
-        var apiserver = 'http://dev1.jd-bdmd.com:18001';
+        var apiserver = 'http://192.168.2.11:18001';
         var all_diagnosis = new Array();
         function setMarked(diag){
-            $(".diag_nav :contains(" + diag + ")").each(
+            $("li.diag_nav :contains('" + diag + "')").map(
                 function (){
                     if ($(this).text() == diag)
                     {
-                        $(this).addClass("btn-info");
+                        $(this).parent().addClass("btn-info");
                     }
                 }
             );
         }
         function delDiagnosis(diag){
-            $(".diag_nav :contains(" + diag + ")").each(
+            $("li.diag_nav :contains('" + diag + "')").map(
                 function (){
                     if ($(this).text() == diag)
                     {
@@ -111,6 +112,12 @@
                     }
                 }
             );
+        }
+        function hideLabeled(){
+            $("li.diag_nav.btn-info").hide();
+        }
+        function showAllItem(){
+            $(".diag_nav").show();
         }
         function initGroup(data)
         {
@@ -218,19 +225,17 @@
                  data: {'source' : source},
                  dataType: "json",  
                  success: function(data){  
-                    all_diagnosis = data['value'];
-                    var diag_list = new Array();
+                    var diag_list = data['value'];
                     var labeled = 0;
                     var not_labeled = 0;
-                    for (var diag in all_diagnosis)
+                    for (var i = 0; i < diag_list.length; i++)
                     {
-                        if (all_diagnosis[diag]['marked']){
+                        if (diag_list[i]['marked']){
                             labeled += 1;
                         }
                         else{
                             not_labeled += 1;
                         }
-                        diag_list.push(all_diagnosis[diag]);
                     }
                     $("#lbl_stat").text("已标注(" + labeled + ") 剩余(" + not_labeled + ")");
                     initNav(diag_list);
@@ -302,6 +307,16 @@
                 $('ul.hosp-alias > li').removeClass('active');
                 $(this).addClass('active');
                 getDiagList();
+            });
+            $('#btn_filter').click(function(){
+                if ($(this).text() == "显示未标注"){
+                    hideLabeled();
+                    $(this).text("显示全部");
+                }        
+                else{
+                    showAllItem();
+                    $(this).text("显示未标注");
+                }
             });
           });
     </script>

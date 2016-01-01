@@ -89,6 +89,12 @@ class DiagnosisManager(object):
                 if ch not in self.diagIndex:
                     self.diagIndex[ch] = set()
                 self.diagIndex[ch].add(diag)
+        for diag in self.marked_diagnosis:
+            for ch in diag:
+                if ch not in self.diagIndex:
+                    self.diagIndex[ch] = set()
+                self.diagIndex[ch].add(diag)
+
 
     def mark(self, diagnosis, gid, syn_diag, mongo_client):
         '''
@@ -105,7 +111,7 @@ class DiagnosisManager(object):
             if not isinstance(syn_diag, unicode):
                 syn_diag = syn_diag.decode('utf-8')
             syn_diag = syn_diag.strip()
-            if syn_diag not in self.diagnosis_list:
+            if syn_diag not in self.diagnosis_list and syn_diag not in self.marked_diagnosis:
                 logging.warn('syn_diag not found')
                 return "syn_diag not found"
         try:
@@ -172,12 +178,13 @@ class DiagnosisManager(object):
     def getDiagnosis(self, type, source = 'all'):
         tmp = {}
         for diag in self.diagnosis_list:
-            if source != 'all' and source not in self.diagnosis_list[diag].get('source', []):
+            if source != 'all' and source not in self.diagnosis_list.get(diag, {}).get('source', []):
                 continue
             tmp[diag] = {}
             tmp[diag].update(self.diagnosis_list[diag])
             if diag in self.marked_diagnosis:
                 tmp[diag]['marked'] = True
+        tmp = sorted([v for v in tmp.values()], key = lambda a: a.get('freq', 0), reverse = True)
         return tmp
 
     def getLabelInfo(self, diagnosis):
@@ -187,13 +194,14 @@ class DiagnosisManager(object):
         if not isinstance(diagnosis, unicode):
             diagnosis = diagnosis.decode('utf-8')
         diagnosis = diagnosis.strip()
+        tmp_diagnosis = diagnosis.replace('(未特指)', '').replace('（未特指）', '').replace('NOS', '')
         rank_dict = {}
-        for ch in diagnosis:
+        for ch in tmp_diagnosis:
             for wd in self.diagIndex.get(ch,  []):
                 if wd not in rank_dict:
-                    rank_dict[wd] = 1
+                    rank_dict[wd] = 1.0 / (len(wd) + len(tmp_diagnosis))
                 else:
-                    rank_dict[wd] += 1
+                    rank_dict[wd] += 1.0 / (len(wd) + len(tmp_diagnosis))
         rank_list = sorted([(k, v) for k, v in rank_dict.iteritems()], key = lambda a:a[1], reverse = True)
         group_list = []
         for item in rank_list:
@@ -219,7 +227,7 @@ class DiagnosisManager(object):
         result = {
             'key' : diagnosis,
             'groups' : groups,
-            'source' : self.diagnosis_list[diagnosis].get('source', []),
+            'source' : self.diagnosis_list.get(diagnosis, {}).get('source', []),
             'marked' : diagnosis in self.marked_diagnosis
         }
         return result
@@ -229,17 +237,16 @@ class DiagnosisManager(object):
             diagnosis  = diagnosis.decode('utf-8')
         diagnosis = diagnosis.strip()
         changed_groups = []
-        if diagnosis not in self.diagnosis_list:
-            return {'ret_code' : 'diagnosis not found'}
         if diagnosis in self.marked_diagnosis:
             group = self.marked_diagnosis[diagnosis]
             group.remove(diagnosis)
             changed_groups.append(group)
             del self.marked_diagnosis[diagnosis]
-        del self.diagnosis_list[diagnosis]
+        if diagnosis in self.diagnosis_list:
+            del self.diagnosis_list[diagnosis]
 
-        collection = mongo_client['label']['diagnosis']
-        collection.delete_one({'_id' : diagnosis})
+            collection = mongo_client['label']['diagnosis']
+            collection.delete_one({'_id' : diagnosis})
         self.update(changed_groups, mongo_client)
         return {'ret_code' : 'succ'}
 

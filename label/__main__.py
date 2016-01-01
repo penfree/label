@@ -32,6 +32,7 @@ from argparse import ArgumentParser
 from unifiedrpc import context
 
 from diagnosis.service import DiagnosisService
+from drug.service import DrugService
 
 def getArguments():
     """Get arguments
@@ -81,6 +82,7 @@ def main():
     server.addAdapter(GeventWebAdapter('web', args.host, args.port))
     # Add services
     server.addService(DiagnosisService(configs))
+    server.addService(DrugService(configs))
     # Start server
     server.start()
 

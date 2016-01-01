@@ -42,6 +42,11 @@ class DiagUtil(object):
                 gid += 1
 
     def addLabelData(self, data_file, source):
+        '''
+            添加待标注数据
+            @param data_file: 输入文件, 格式是"诊断名\t频次", 频次可省
+            @param source: 来源医院
+        '''
         collection = self.client['label']['diagnosis']
         with open(data_file) as df:
             for line in df:

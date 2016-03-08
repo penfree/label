@@ -76,17 +76,18 @@ def main():
     configs.loadSchema(config_file)
     # Create the server
     Server.initResponse = initResponse
-    server = Server(**{
+    server = Server([DiagnosisService(configs), DrugService(configs)],
+        **{
         CONFIG_RESPONSE_MIMETYPE: mime.APPLICATION_JSON,
         CONFIG_RESPONSE_CONTENT_CONTAINER: APIContentContainer
         })
-    server.addAdapter(GeventWebAdapter('web', args.host, args.port))
+        #server.addAdapter(GeventWebAdapter('web', args.host, args.port))
     # Add services
-    server.addService(DiagnosisService(configs))
-    server.addService(DrugService(configs))
-    server.addService(LabService(configs))
+    #server.addService(DiagnosisService(configs))
+    #server.addService(DrugService(configs))
     # Start server
-    server.start()
+    #server.start()
+    server.start([ GeventWebAdapter('web', args.host, args.port) ], runtimeInitializer = lambda rt: addContextHandlers(rt))
 
 try:
     sys.exit(main())

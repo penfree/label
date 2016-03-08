@@ -33,6 +33,18 @@
         </div>
         <div id="navbar" class="navbar-collapse collapse">
           <ul class="nav navbar-nav navbar-right">
+              <li>
+                <div class="navbar-form">
+                    <div class="input-group">
+                       <input type="text" class="form-control" id='specified_cname'>
+                       <span class="input-group-btn">
+                          <button class="btn btn-default" type="button" id='btn_setcname'>
+                             指定通用名
+                          </button>
+                       </span>
+                    </div><!-- /input-group -->
+                </div>
+              </li>
               <li><a href="#" id="btn_refresh">刷新</a></li>
               <li><a href="#" id="btn_filter">显示未标注</a></li>
               <li><a  href="#" id="lbl_stat"></a></li>
@@ -40,7 +52,9 @@
               <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">医院<span class="caret"></span></a>
               <ul class="dropdown-menu hosp-alias">
                 <li class="active" ><a href="#">all</a></li>
+                <li><a href="#">xiangya1</a></li>
                 <li><a href="#">gyfyy</a></li>
+                <li><a href="#">fssy</a></li>
               </ul>
             </li>
           </ul>
@@ -331,6 +345,33 @@
             $('#btn_refresh').click(function(){
                 getDrugList();    
             })
+            $("#btn_setcname").click(function(e){
+                 var source = $("ul.hosp-alias > li.active").children("a").text();
+                 var cname = $("#specified_cname").val();
+                 var drug_code =  $("#curr_drug_code").text();
+                 if (cname.length == 0 || drug_code.length == 0)
+                 {
+                    alert("请先选择待标注药品");
+                 }
+                 else{
+                     $.ajax({  
+                         type: "get",  
+                         async: false,  
+                         url: apiserver + '/drug/mark',  
+                         data: "key=" + encodeURIComponent(drug_code) + "&source=" + source + "&cname=" + encodeURIComponent(cname),
+                         dataType: "json",  
+                         success: function(data){  
+                            setMarked($('#curr_drug_code').text());
+                            initGroup(data['value']);
+                         },  
+                         error: function(){  
+                             alert('fail');  
+                         }  
+                                
+                    });
+                 }
+                    
+            });
         });
     </script>
   </body>

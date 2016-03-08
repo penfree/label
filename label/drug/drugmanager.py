@@ -106,6 +106,21 @@ class DrugManager(object):
                     self.cname_index[ch] = set()
                 self.cname_index[ch].add(key)
 
+        self.preMark(mongo_client)
+
+    def preMark(self, mongo_client):
+        '''
+            对于药品名称是已知通用名的,直接标记上
+        '''
+        for item in self.drug_list.values():
+            if item.get('cname'):
+                continue
+            if item['drug_name'] in self.wiki_cname_index:
+                try:
+                    self.mark(item['code'], item['source'], item['drug_name'], None, mongo_client, return_label_info = False)
+                except Exception,e:
+                    logging.exception(e)
+
     def getDrugList(self, source):
         result = []
         if not source:
@@ -293,13 +308,15 @@ class DrugManager(object):
         else:
             raise NotFoundError()
 
-    def mark(self, key, source, cname, pname, mongo_client):
+    def mark(self, key, source, cname, pname, mongo_client, return_label_info = True):
         key = self.unicode(key)
         source = self.unicode(source)
         cname = self.unicode(cname)
         pname = self.unicode(pname)
         label_drug = self.drug_list.get((key, source))
         if not label_drug:
+            raise NotFoundError()
+        if not pname and cname not in self.wiki_cname_index:
             raise NotFoundError()
         if not cname and 'cname' in label_drug:
             del label_drug['cname']
@@ -317,4 +334,7 @@ class DrugManager(object):
 
         collection = mongo_client['label']['drug']
         collection.replace_one({'_id' : label_drug['_id']}, label_drug)
-        return self.getLabelInfo(key, source)
+        if return_label_info:
+            return self.getLabelInfo(key, source)
+        else:
+            return None

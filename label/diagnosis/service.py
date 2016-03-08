@@ -107,3 +107,27 @@ class DiagnosisService(ServiceBase):
         '''
         with self.getMongodb() as client:
             self.diag_manager.delete(key, client)
+
+    @get('/diagnosis/getdict')
+    @endpoint()
+    def getDict(self):
+        result = []
+        with self.getMongodb() as client:
+            collection = client['label']['diagnosis_group']
+            for doc in collection.find():
+                for item in doc['items']:
+                    if item == doc['diagnosis']:
+                        continue
+                    else:
+                        result.append((item, doc['diagnosis']))
+        return result
+
+    @get('/diagnosis/getdisease')
+    @endpoint()
+    def getDisease(self):
+        result = []
+        with self.getMongodb() as client:
+            collection = client['label']['diagnosis_group']
+            for doc in collection.find():
+                result.append(doc['diagnosis'])
+        return result

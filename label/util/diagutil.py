@@ -57,17 +57,17 @@ class DiagUtil(object):
                     if count < 30:
                         continue
                 obj = {'_id' : diagnosis}
-                collection.update_one( { '_id': diagnosis }, { '$addToSet': { 'source': source }}, upsert = True); 
+                collection.update_one( { '_id': diagnosis }, { '$addToSet': { 'source': source }, '$inc' : {'freq' : count}}, upsert = True); 
 
 
 def getArguments():
     """Get arguments
     """
     parser = ArgumentParser(description = 'label platform micro service')
-    parser.add_argument('--host', dest = 'host', default = 'mongo0.dev-bdmd.com', help = 'The mongodb server')
-    parser.add_argument('--port', dest = 'port', type = int, default = 27015, help = 'The mongodb port')
+    parser.add_argument('--host', dest = 'host', default = 'storage0', help = 'The mongodb server')
+    parser.add_argument('--port', dest = 'port', type = int, default = 27017, help = 'The mongodb port')
     parser.add_argument('--file', '-f', dest = 'file', required = True, help = '')
-    parser.add_argument('--cmd', '-c', dest = 'cmd',required = True)
+    parser.add_argument('--cmd', '-c', dest = 'cmd',required = True, help = 'init|label|gen_dict')
     parser.add_argument('--source', '-s', dest = 'source')
     # Done
     return parser.parse_args()

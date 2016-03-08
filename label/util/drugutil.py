@@ -65,7 +65,7 @@ def getArguments():
     parser.add_argument('--host', dest = 'host', default = 'storage0.jd-bdmd.com', help = 'The mongodb server')
     parser.add_argument('--port', dest = 'port', type = int, default = 27017, help = 'The mongodb port')
     parser.add_argument('--file', '-f', dest = 'file', required = True, help = '')
-    parser.add_argument('--cmd', '-c', dest = 'cmd',required = True)
+    parser.add_argument('--cmd', '-c', dest = 'cmd',required = True, help = 'gen_dict|label')
     parser.add_argument('--key', dest = 'key_field', default = 'drug_code')
     parser.add_argument('--source', '-s', dest = 'source')
     # Done

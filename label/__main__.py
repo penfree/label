@@ -33,6 +33,7 @@ from unifiedrpc import context
 
 from diagnosis.service import DiagnosisService
 from drug.service import DrugService
+from lab.service import LabService
 
 def getArguments():
     """Get arguments
@@ -83,6 +84,7 @@ def main():
     # Add services
     server.addService(DiagnosisService(configs))
     server.addService(DrugService(configs))
+    server.addService(LabService(configs))
     # Start server
     server.start()
 

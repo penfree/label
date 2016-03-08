@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="../../favicon.ico">
+
+    <title>检验指标归一化标注平台</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom styles for this template -->
+    <link href="dashboard.css" rel="stylesheet">
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="//cdn.bootcss.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="//cdn.bootcss.com/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+
+  <body>
+
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="#">检验指标归一化</a>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+          <ul class="nav navbar-nav navbar-right">
+              <li><button id="btn_msg" type="button" class="btn btn-warning">Warn</button></button></li>
+              <li><a href="#" id="btn_refresh">刷新</a></li>
+              <li><a href="#" id="btn_filter">显示未标注</a></li>
+              <li><a  href="#" id="lbl_stat"></a></li>
+            <li class="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">医院<span class="caret"></span></a>
+              <ul class="dropdown-menu hosp-alias">
+                <li class="active" ><a href="#">all</a></li>
+                <li><a href="#">xiangya1</a></li>
+                <li><a href="#">gyfyy</a></li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-3 col-md-2 sidebar">
+          <ul class="nav nav-sidebar" id="lablist">
+          </ul>
+        </div>
+        <div class="col-sm-6 col-sm-offset-3 col-md-7 col-md-offset-2 main">
+            <div id="curr_label_info">
+                <h2><span id="curr_name"></span>&nbsp;&nbsp;<span class="text-danger" id="curr_sample"></span></h2>
+                <strong>出现的套餐:</strong><span id="curr_item_set"></span>
+                <div class = "navbar-form">
+                    <input type="text" class="form-control" placeholder="样本名称" id="specified_sample">
+                    <input type="text" class="form-control" placeholder="指标名称" id="specified_name">
+                    <input type="text" class="form-control" placeholder="检查方法,为空则使用缺省值" id="specified_method">
+                    <button type="button" class="btn btm-lg btn-info" id='btn_setstd'>指定标准词</button>
+                </div>
+            </div>
+            <ul class='list-unstyled' id="cand_list"></ul>
+        </div>
+      </div>
+      <div class='sidebar col-sm-3 col-md-3 col-sm-offset-6 col-md-offset-9'> 
+           <div class="panel panel-warning" id="std_lab_info">   
+               <div class="panel-heading">   
+                   <h3 class="panel-title"><span id="std_lab_name"></span>-<span id="std_lab_sample"></span>-<span id="std_lab_method"></span></h3>
+               </div>  
+                <div class="panel-body">
+                    <input type="text" class="form-control" placeholder="单位名称" id="txt_unit">
+                    <input type="text" class="form-control" placeholder="正常值范围" id="txt_range">
+                    <input type="text" class="form-control" placeholder="定性描述取值" id="txt_option">
+                    <button type="button" class="btn btm-lg btn-info" id='btn_modifystd'>确认</button>
+                </div> 
+            </div> 
+           <div id="labeled_div"></div>
+      </div> 
+    </div>
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
+    <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script>
+        var apiserver = 'http://192.168.2.11:18001';
+        function setMarked(sample, name){
+            $("li.lab_nav :contains('" + name + "')").each(
+                function (){
+                    if ($(this).find(".lab_name").text() == name && $(this).find(".lab_sample").text() == sample)
+                    {
+                        $(this).parent().addClass("btn-info");
+                    }
+                }
+            );
+        }
+        function delDiagnosis(lab){
+            $("li.lab_nav :contains('" + lab + "')").map(
+                function (){
+                    if ($(this).text() == lab)
+                    {
+                        $(this).remove();
+                    }
+                }
+            );
+        }
+        function hideLabeled(){
+            $("li.lab_nav.btn-info").hide();
+        }
+        function showAllItem(){
+            $(".lab_nav").show();
+        }
+        function clearRight(){
+            $("#curr_label_info").hide();
+        }
+        function clearLeft(){
+            $('#lablist').html('');
+        }
+
+        function getLabelInfo(sample, name){
+             source = $('ul.hosp-alias > li.active').text();
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/lab/info',  
+                 data: {'sample' : sample, 'source' : source, 'name' : name},
+                 dataType: "json",  
+                 success: function(data){  
+                    initGroup(data['value']);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+                        
+            })
+        }
+        function initWiki(data){
+            $("#wiki_div").html(""); 
+            var htmlobj = "<dl>";
+            for (var key in data){
+                htmlobj += "<dt>" + key + "</dt>";
+                htmlobj += "<dd>" + data[key] + "</dd>";
+            }
+            htmlobj += "</dl>";
+            $("#wiki_div").html(htmlobj);
+        }
+        function showInfo(data){
+            $("#std_lab_name").text(data['info']['name']);
+            $("#std_lab_sample").text(data['info'].sample);
+            $("#std_lab_method").text(data['info'].method);
+            if (data['info']['unit']){
+                $('#txt_unit').val(data['info']['unit']);
+            }
+            else{
+                $('#txt_unit').val('');
+            }
+            if (data['info']['range']){
+                $('#txt_range').val(data['info']['range']);
+            }
+            else{
+                $('#txt_range').val('');
+            }
+            if (data['info']['qualitative_option']){
+                $('#txt_option').val(data['info']['qualitative_option']);
+            }
+            else{
+                $('#txt_option').val('');
+            }
+            $("#std_lab_info").show();
+            var htmlobj = '';
+            htmlobj += '<div class="panel panel-warning">';
+            htmlobj += '   <div class="panel-heading">';
+            htmlobj += '     <h3 class="panel-title">已标注信息</h3></div';
+            htmlobj += '   <div class="panel-body"><ul class="list-unstyled"> ';
+            for (var i = 0; i < data['items'].length; i++)
+            {
+                htmlobj += '<li><dl>';
+                htmlobj += '<dt>样本名称:</dt><dd>' + data['items'][i].sample +'</dd>';
+                htmlobj += '<dt>指标名称:</dt><dd>' + data['items'][i].name +'</dd>';
+                htmlobj += '<dt>出现的套餐:</dt><dd>' + data['items'][i].item_sets.join(",") +'</dd>';
+                htmlobj += '</dl></li>';
+            }
+            htmlobj += "   </ul></div>"; 
+            $("#labeled_div").html(htmlobj);
+        
+        }
+        function initGroup(data){
+            var label_info = data['info'];
+            $("#curr_name").text(label_info['name']);
+            $("#curr_sample").text(label_info['sample']);
+            $("#curr_item_set").html(label_info['item_sets'].map(function(s){return '<span class="text-danger">'+ s +'</span>'}).join(",&nbsp;&nbsp;"));
+            $("#specified_sample").val(label_info['sample']);
+            $("#specified_name").val(label_info['name']);
+            $("#specified_method").val("");
+            $("#curr_label_info").show();
+
+            var cand_list = data['cands'];
+            var container = $('#cand_list');
+            container.html("");
+            for (var i = 0; i < cand_list.length; i++)
+            {
+                var htmlobj = '';
+                htmlobj += "<li>";
+                htmlobj += '  <div class="panel panel-warning">';
+                htmlobj += '    <div class="panel-heading">';
+                htmlobj += '      <h3 class="panel-title"><span class="lab_name">' + cand_list[i]['name'] + '</span>';
+                htmlobj += '    </h3></div>';
+                htmlobj += '  <div class="panel-body"> ';
+                for (var j = 0; j < cand_list[i]['info'].length; j++)
+                {
+                    htmlobj += '<span><a class="lab_link" href="#"><span class="lab_sample">' + cand_list[i]['info'][j]['sample'];
+                    htmlobj += '</span>(<span class="lab_method">' +  cand_list[i]['info'][j]['method']+ "</span>)";
+                    if (cand_list[i]['info'][j]['marked'])
+                    {
+                        htmlobj += '<a class="unmark btn btn-success btn-xs"><span class="classglyphicon glyphicon-minus"></span></a>';
+                    }
+                    else{
+                        htmlobj += '<a class="mark btn btn-info btn-xs"><span class="classglyphicon glyphicon-plus"></span></a>';
+                    }
+                    htmlobj += "</span>&nbsp;&nbsp;&nbsp;&nbsp;";
+                }
+                htmlobj += ' </div> </div></li>';
+                container.append(htmlobj);
+            }
+            $(".lab_link").click(function(e){
+                 var sample = $(this).find(".lab_sample").text();
+                 var name = $(this).parent().parent().parent().find(".lab_name").text();
+                 var method = $(this).find(".lab_method").text();
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/lab/getstd',  
+                     data: {'sample' : sample, 'name' : name, 'method' : method},
+                     dataType: "json",  
+                     success: function(data){  
+                        showInfo(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+            });
+            $(".unmark").click(function(e){
+                 var source = $("ul.hosp-alias > li.active").children("a").text();
+                 var name = $("#curr_name").text();
+                 var sample = $("#curr_sample").text();
+                 var normal_sample = $(this).parent().find(".lab_sample").text();
+                 var normal_name = $(this).parent().parent().parent().find(".lab_name").text();
+                 var method = $(this).parent().find(".lab_method").text();
+                 var req = {"source" : source, "name" : name, "sample" : sample, "nsample" : normal_sample, "nname" : normal_name, "method" : method};
+
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/lab/unmark',  
+                     data: req,
+                     dataType: "json",  
+                     success: function(data){  
+                        setMarked(sample, name);
+                        initGroup(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+                    
+            });
+            $(".mark").click(function(e){
+                 var source = $("ul.hosp-alias > li.active").children("a").text();
+                 var name = $("#curr_name").text();
+                 var sample = $("#curr_sample").text();
+                 var normal_sample = $(this).parent().find(".lab_sample").text();
+                 var normal_name = $(this).parent().parent().parent().find(".lab_name").text();
+                 var method = $(this).parent().find(".lab_method").text();
+                 var req = {"source" : source, "name" : name, "sample" : sample, "nsample" : normal_sample, "nname" : normal_name, "method" : method};
+
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/lab/mark',  
+                     data: req,
+                     dataType: "json",  
+                     success: function(data){  
+                        setMarked(sample, name);
+                        initGroup(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+                    
+            });
+        }
+
+        function getLabList(){
+            clearLeft();
+            clearRight();
+            var source = $("ul.hosp-alias > li.active").children("a").text();
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/lab',  
+                 data: {'source' : source},
+                 dataType: "json",  
+                 success: function(data){  
+                    var lab_list = data['value'];
+                    var labeled = 0;
+                    var not_labeled = 0;
+                    for (var i = 0; i < lab_list.length; i++)
+                    {
+                        var marked = false;
+                        if (lab_list[i]['marked']){
+                            marked = true;
+                        }
+                        if (marked){
+                            labeled += 1;
+                        }
+                        else{
+                            not_labeled += 1;
+                        }
+                    }
+                    $("#lbl_stat").text("已标注(" + labeled + ") 剩余(" + not_labeled + ")");
+                    initNav(lab_list);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+             }); 
+        }
+    
+        function initNav(lab_list) {
+            htmlobj = '';
+            for (var i = 0; i < lab_list.length; i++)
+            {
+                var marked = false;
+                if (lab_list[i]['marked']){
+                    marked = true;
+                }
+                if (marked){
+                    htmlobj += '<li class="lab_nav btn-info"><a href="#"><span class="lab_name">' + lab_list[i]['name'] + '</span>(<span class="lab_sample">' + lab_list[i]['sample'] + '</span>)</a></li>';
+                }
+                else {
+                    htmlobj += '<li class="lab_nav"><a href="#"><span class="lab_name">' + lab_list[i]['name'] + '</span>(<span class="lab_sample">' + lab_list[i]['sample'] + '</span>)</a></li>';
+                }
+            }
+            $('#lablist').html(htmlobj);
+            $('.lab_nav').click(function(){
+                var sample = $(this).find(".lab_sample").text();
+                var name = $(this).find(".lab_name").text();
+                getLabelInfo(sample, name);
+            })
+        }
+
+        $(document).ready(function(){
+            $('ul.hosp-alias > li').click(function (e) {
+                e.preventDefault();
+                $('ul.hosp-alias > li').removeClass('active');
+                $(this).addClass('active');
+                getLabList();
+            });
+            $('#btn_filter').click(function(){
+                if ($(this).text() == "显示未标注"){
+                    hideLabeled();
+                    $(this).text("显示全部");
+                }        
+                else{
+                    showAllItem();
+                    $(this).text("显示未标注");
+                }
+            });
+            $('#btn_refresh').click(function(){
+                getLabList();    
+            })
+            $("#curr_label_info").hide();
+            $("#btn_msg").hide();
+            $("#btn_setstd").click(function(e){
+                var normal_sample = $("#specified_sample").val();
+                var normal_name = $("#specified_name").val();
+                var method = $("#specified_method").val();
+                var req = {};
+                if (normal_sample.length > 0)
+                {
+                    req['nsample'] = normal_sample;
+                }
+                if (normal_name.length > 0)
+                {
+                    req['nname'] = normal_name;
+                }
+                if (method.length > 0){
+                    req['method'] = method;
+                }
+                req['source']= $("ul.hosp-alias > li.active").children("a").text();
+                req['name'] = $("#curr_name").text();
+                req['sample'] = $("#curr_sample").text();
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/lab/mark',  
+                     data: req,
+                     dataType: "json",  
+                     success: function(data){  
+                        setMarked(req['sample'], req['name']);
+                        initGroup(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+            });
+            $("#std_lab_info").hide();
+            $("#btn_modifystd").click(function(e){
+                var req = {};
+                req['sample'] = $("#std_lab_sample").text();
+                req['name'] = $("#std_lab_name").text();
+                req['method'] = $("#std_lab_method").text();
+                req['unit'] = $("#txt_unit").val();
+                req['range'] = $('#txt_range').val();
+                req['qualitative_option'] = $('#txt_option').val();
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/lab/editstd',  
+                     data: req,
+                     dataType: "json",  
+                     success: function(data){  
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+
+            });
+        });
+    </script>
+  </body>
+</html>

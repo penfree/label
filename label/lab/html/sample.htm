@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="../../favicon.ico">
+
+    <title>检验指标归一化标注平台</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom styles for this template -->
+    <link href="dashboard.css" rel="stylesheet">
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="//cdn.bootcss.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="//cdn.bootcss.com/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+
+  <body>
+
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="#">检验样本</a>
+        </div>
+        <div id="navbar" class="navbar-collapse collapse">
+          <ul class="nav navbar-nav navbar-right">
+              <li><a href="#" id="btn_refresh">刷新</a></li>
+              <li><a href="#" id="btn_filter">显示未标注</a></li>
+              <li><a  href="#" id="lbl_stat"></a></li>
+            <li class="dropdown">
+              <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">医院<span class="caret"></span></a>
+              <ul class="dropdown-menu hosp-alias">
+                <li class="active" ><a href="#">all</a></li>
+                <li><a href="#">xiangya1</a></li>
+                <li><a href="#">gyfyy</a></li>
+              </ul>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-6 col-sm-offset-3 col-md-7 col-md-offset-2 main">
+            <div id="curr_label_info">
+                <div class = "navbar-form">
+                    <input type="text" class="form-control" placeholder="样本名称" id="specified_sample">
+                    <input type="text" class="form-control" placeholder="父样本名称,为空则添加样本" id="specified_parent">
+                    <button type="button" class="btn btm-lg btn-info" id='btn_add'>添加</button>
+                    <button type="button" class="btn btm-lg btn-info" id='btn_del'>删除</button>
+                </div>
+            </div>
+            <div><ul class='list-unstyled' id="sample_list"></ul></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
+    <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script>
+        var apiserver = 'http://192.168.2.11:18001';
+        function initList(data){
+            var htmlobj = '';
+            for (var i = 0; i < data.length; i ++)
+            {
+                htmlobj += "<li>";
+                htmlobj += '  <div class="panel panel-warning">';
+                htmlobj += '    <div class="panel-heading">';
+                htmlobj += '      <h3 class="panel-title">' + data[i]['sample'];
+                htmlobj += '    </h3></div>';
+                htmlobj += '  <div class="panel-body"> ';
+                htmlobj += '    <strong>父样本:&nbsp;&nbsp;</strong>' + data[i]['parent'].join(',') + '<br />';
+                htmlobj += '    <strong>子样本:&nbsp;&nbsp;</strong>' + data[i]['children'].join(',');
+                htmlobj += '  </div></li>';
+            }
+            $("#sample_list").html(htmlobj);
+        }
+        $(document).ready(function(){
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/lab/sample',  
+                 data: {},
+                 dataType: "json",  
+                 success: function(data){  
+                    initList(data['value']);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+                        
+            });
+            $("#btn_del").click(function(e){
+                var sample = $("#specified_sample").val();
+                var parent = $("#specified_parent").val();
+                var req = {};
+                if (sample.length == 0 || parent == 0)
+                {
+                    alert('样本名称和父样本名称都不可以为空');
+                    return;
+                }
+                req['sample'] = sample;
+                req['parent'] = normal_name
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/lab/sample/removeparent',  
+                     data: req,
+                     dataType: "json",  
+                     success: function(data){  
+                        initList(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+            });
+            $("#btn_add").click(function(e){
+                var sample = $("#specified_sample").val();
+                var parent = $("#specified_parent").val();
+                var req = {};
+                var req_url = '/lab/sample/addparent';
+                if (sample.length > 0)
+                {
+                    req['sample'] = sample;
+                }
+                else{
+                    alert('样本名称不可为空');
+                    return;
+                }
+                if (parent.length > 0)
+                {
+                    req['parent'] = parent;
+                }
+                else
+                {
+                    req_url = '/lab/sample/add';
+                }
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + req_url,  
+                     data: req,
+                     dataType: "json",  
+                     success: function(data){  
+                        initList(data['value']);
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                });
+            });
+        });
+    </script>
+  </body>
+</html>

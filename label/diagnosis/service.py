@@ -70,21 +70,23 @@ class DiagnosisService(ServiceBase):
             获取一个诊断的标注信息, 即已标注信息和候选集合
             @param key: 诊断名称
         '''
-        result = self.diag_manager.getLabelInfo(key)
+        with self.getMongodb() as client:
+            result = self.diag_manager.getLabelInfo(key, client)
         return result
 
     @get('/diagnosis/mark')
     @endpoint()
-    def mark(self, diag, gid = None, syn_diag = None):
+    def mark(self, diag, source = None, gid = None, syn_diag = None):
         '''
             标记诊断所属group
             @param diag: 诊断
             @param gid: 诊断分组id
         '''
         with self.getMongodb() as client:
-            ret = self.diag_manager.mark(diag, gid, syn_diag, client)
+            ret = self.diag_manager.mark(diag, source, gid, syn_diag, client)
 
-        result = self.diag_manager.getLabelInfo(diag)
+        with self.getMongodb() as client:
+            result = self.diag_manager.getLabelInfo(diag, client)
         return result
 
     @get('/diagnosis/markgroup')

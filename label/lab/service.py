@@ -13,12 +13,13 @@ import sys
 reload(sys)
 sys.setdefaultencoding('utf-8')
 from unifiedrpc import endpoint, context
+from unifiedrpc.helpers import paramtype
 from unifiedrpc.errors import BadRequestError, NotFoundError
 from unifiedrpc.adapters.web import get, post, put, delete
 
 import logging
 from label.base import ServiceBase
-from label.lab.labmanager import LabManager
+from label.lab.labmanager import LabManager, STD_LAB_COLLECTION, LABEL_LAB_COLLECTION
 
 class LabService(ServiceBase):
     """The diagnosis label service
@@ -52,6 +53,7 @@ class LabService(ServiceBase):
         return self.lab_manager.getLabList(source)
 
     @get('/lab/info')
+    @paramtype(sample = unicode, name = unicode)
     @endpoint()
     def getLabelInfo(self, sample, name, source):
         '''
@@ -60,8 +62,9 @@ class LabService(ServiceBase):
         return self.lab_manager.getLabelInfo(sample, name, source)
 
     @get('/lab/mark')
+    @paramtype(sample = unicode, name = unicode, nsample = unicode, nname = unicode, nmethod = unicode)
     @endpoint()
-    def mark(self, sample, name, source, nsample = None, nname = None, method = None):
+    def mark(self, sample, name, source, nid = None, nsample = None, nname = None, method = None):
         '''
             标注标准词,
             @param sample: 待标注样本名称
@@ -71,10 +74,11 @@ class LabService(ServiceBase):
         '''
         result = []
         with self.getMongodb() as client:
-            result = self.lab_manager.mark(sample, name, source, nsample, nname, method, client)
+            result = self.lab_manager.mark(sample, name, source, nid, nsample, nname, method, client)
         return result
 
     @get('/lab/unmark')
+    @paramtype(sample = unicode, name = unicode, method = unicode)
     @endpoint()
     def unmark(self, sample, name, source, nsample, nname, method = None):
         '''
@@ -97,9 +101,7 @@ class LabService(ServiceBase):
         '''
         result = []
         with self.getMongodb() as client:
-            collection = client['label']['std_lab']
-            for doc in collection.find():
-                result.append(doc)
+            result = self.lab_manager.getStdItemList(client)
         return result
 
     @get('/lab/getdict')
@@ -110,63 +112,28 @@ class LabService(ServiceBase):
         '''
 
     @get('/lab/editstd')
+    @paramtype(sample = unicode, name = unicode, method = unicode, unit = unicode, range = unicode, qualitative_option = unicode)
     @endpoint()
-    def editStdItem(self, sample, name, method = u'缺省', unit = None, range = None, qualitative_option = None):
+    def editStdItem(self, **kwargs):
         result = None
         with self.getMongodb() as client:
-            result = self.lab_manager.editStdItem(client, sample, name, method = method,
-                                unit = unit, range = range, qualitative_option = qualitative_option)
+            result = self.lab_manager.editStdItem(client, **kwargs)
         return result.dump()
 
 
-    @get('/lab/sample')
-    @endpoint()
-    def getSampleList(self):
-        '''
-            获取样本列表
-        '''
-        return self.lab_manager.getSampleList()
-    
-    @get('/lab/sample/add')
-    @endpoint()
-    def addSample(self, sample):
-        '''
-            增加样本
-        '''
-        result = None
-        with self.getMongodb() as client:
-            self.lab_manager.addSample(sample, client)
-        result = self.lab_manager.getSampleList()
-        return result
-
-    @get('/lab/sample/addparent')
-    @endpoint()
-    def addSampleParent(self, sample, parent):
-        '''
-            给样本添加上位样本
-        '''
-        result = None
-        with self.getMongodb() as client:
-            result = self.lab_manager.addSampleParent(sample, parent, client)
-        return result
-
-    @get('/lab/sample/removeparent')
-    @endpoint()
-    def removeSampleParent(self, sample, parent):
-        '''
-            移除上位样本
-        '''
-        result = None
-        with self.getMongodb() as client:
-            return self.lab_manager.removeSampleParent(sample, parent, client)
-        return result
-
     @get('/lab/getstd')
+    @paramtype(sample = unicode, name = unicode, method = unicode, id = int)
     @endpoint()
-    def getStdItem(self, sample, name, method):
+    def getStdItem(self, sample = None, name = None, method = None, id = None):
         '''
             获取标准词
         '''
-        return self.lab_manager.getStdItem(sample, name, method)
+        return self.lab_manager.getStdItem(sample, name, method, id)
 
+    @get('/lab/delstd')
+    @paramtype(id = int)
+    @endpoint()
+    def delStdItem(self, id):
+        with self.getMongodb() as client:
+            self.lab_manager.delStdItem(id, client)
 

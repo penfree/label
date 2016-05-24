@@ -57,3 +57,7 @@ docs/_build/
 target/
 *.swp
 *.out
+*.json
+*.txt
+*.dict
+*.bak

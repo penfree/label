@@ -31,7 +31,25 @@ class DrugUtil(object):
                     tmp.update(item)
                     del tmp['data']
                     df.write('%s\n' % json.dumps(tmp, ensure_ascii = False))
+    def quan2ban(self, ustr):
+        if not isinstance(ustr, unicode):
+            ustr = unicode(ustr)
 
+        rst = ''
+        for ch in ustr:
+            code = ord(ch)
+            if 0xFF01 <= code <= 0xFF5E :
+                code -= 0xFEE0
+            elif code == 0x3000: # 空格
+                code = 0x20
+            rst += unichr(code)
+        return rst 
+    def getStd(self, datafile):
+        collection = self.client['wiki']['drug']
+        with open(datafile, 'w') as df:
+            for item in collection.find(projection = ['commonname']):
+                name = self.quan2ban(item['commonname']).strip()
+                print >>df, name
 
     def addLabelData(self, data_file, source, key_field = 'drug_code'):
         '''
@@ -46,7 +64,7 @@ class DrugUtil(object):
                 obj = json.loads(line)
                 data = {}
                 data['frequency'] = obj.get('frequency', 0)
-                if data['frequency'] < 100:
+                if data['frequency'] < 50:
                     continue
                 data['code'] = obj[key_field]
                 data['drug_name'] = obj['drug_name']
@@ -62,7 +80,7 @@ def getArguments():
     """Get arguments
     """
     parser = ArgumentParser(description = 'label platform micro service')
-    parser.add_argument('--host', dest = 'host', default = 'storage0.jd-bdmd.com', help = 'The mongodb server')
+    parser.add_argument('--host', dest = 'host', default = 'mongo', help = 'The mongodb server')
     parser.add_argument('--port', dest = 'port', type = int, default = 27017, help = 'The mongodb port')
     parser.add_argument('--file', '-f', dest = 'file', required = True, help = '')
     parser.add_argument('--cmd', '-c', dest = 'cmd',required = True, help = 'gen_dict|label')
@@ -84,3 +102,5 @@ if __name__=='__main__':
         if not args.source:
             raise ValueError('source must be specified')
         tool.genDict(args.file, args.source)
+    elif args.cmd == 'getstd':
+        tool.getStd(args.file)

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- 上述3个meta标签*必须*放在最前面，任何其他内容都*必须*跟随其后！ -->
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <link rel="icon" href="../../favicon.ico">
+
+    <title>检验指标归一化标注平台</title>
+
+    <!-- Bootstrap core CSS -->
+    <link href="//cdn.bootcss.com/bootstrap/3.3.5/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Custom styles for this template -->
+    <link href="dashboard.css" rel="stylesheet">
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!--[if lt IE 9]>
+      <script src="//cdn.bootcss.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="//cdn.bootcss.com/respond.js/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+
+  <body>
+
+    <nav class="navbar navbar-inverse navbar-fixed-top">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="#">检验指标标准词</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="container-fluid">
+      <div class="row">
+        <div class="col-sm-3 col-md-2 sidebar">
+          <ul class="nav nav-sidebar" id="lablist">
+          </ul>
+        </div>
+          <div class='sidebar col-sm-5 col-md-5 col-sm-offset-3 col-md-offset-2'> 
+           <div class="panel panel-warning" id="std_lab_info">   
+               <div class="panel-heading">   
+                   <h3 class="panel-title"><span id="std_lab_name"></span>-<span id="std_lab_sample"></span>-<span id="std_lab_method"></span><span id='std_lab_id' class='hide'></span></h3>
+               </div>  
+                <div class="panel-body">
+                    指标名称:<input type="text" class="form-control" placeholder="指标名称" id="txt_std_name">
+                    标本名称:<input type="text" class="form-control" placeholder="样本名称" id="txt_std_sample">
+                    英文名称:<input type="text" class="form-control" placeholder="英文名称" id="txt_english_name">
+                    检查方法:<input type="text" class="form-control" placeholder="检查方法" id="txt_std_method">
+                    一级分类:<input type="text" class="form-control" placeholder="一级分类名称" id="txt_class1">
+                    二级分类:<input type="text" class="form-control" placeholder="二级分类名称" id="txt_class2">
+                    常见套餐:<input type="text" class="form-control" placeholder="常见于哪些套餐" id="txt_item_set">
+                    单位名称:<input type="text" class="form-control" placeholder="单位名称" id="txt_unit">
+                    正常值:<input type="text" class="form-control" placeholder="正常值范围" id="txt_range">
+                    定性描述:<input type="text" class="form-control" placeholder="定性描述取值" id="txt_option">
+                    <button type="button" class="btn btm-lg btn-info" id='btn_modifystd'>确认</button>
+                    <button type="button" class="btn btm-lg btn-info" id='btn_delstd'>删除</button>
+                </div> 
+            </div> 
+      </div> 
+           <div class='sidebar col-sm-4 col-md-5 col-sm-offset-8 col-md-offset-7' id="labeled_div"></div>
+    </div>
+
+    <!-- Bootstrap core JavaScript
+    ================================================== -->
+    <!-- Placed at the end of the document so the pages load faster -->
+    <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
+    <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
+    <script>
+        var apiserver = '/_api';
+        function setMarked(sample, name){
+            $("li.lab_nav :contains('" + name + "')").each(
+                function (){
+                    if ($(this).find(".lab_name").text() == name && $(this).find(".lab_sample").text() == sample)
+                    {
+                        $(this).parent().addClass("btn-info");
+                    }
+                }
+            );
+        }
+        function delDiagnosis(lab){
+            $("li.lab_nav :contains('" + lab + "')").map(
+                function (){
+                    if ($(this).text() == lab)
+                    {
+                        $(this).remove();
+                    }
+                }
+            );
+        }
+        function delItem(id){
+            $("li.lab_nav :contains('" + id + "')").each(
+                function(){
+                if ($(this).find(".lab_id").text() == id){
+                        $(this).remove();
+                    }
+                }        
+            ); 
+        }
+        function hideLabeled(){
+            $("li.lab_nav.btn-info").hide();
+        }
+        function showAllItem(){
+            $(".lab_nav").show();
+        }
+        function clearRight(){
+            $("#curr_label_info").hide();
+        }
+        function clearLeft(){
+            $('#lablist').html('');
+        }
+
+        function getLabelInfo(normal_id){
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/lab/getstd',  
+                 data: {'id' : normal_id},
+                 dataType: "json",  
+                 success: function(data){  
+                    showInfo(data['value']);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+                        
+            })
+        }
+        function initInfo(data, data_key, ctl_key){
+            if (data['info'][data_key]){
+                $('#' + ctl_key).val(data['info'][data_key]);
+            }
+            else{
+                $('#' + ctl_key).val('');
+            }
+        }
+        function showInfo(data){
+            $("#std_lab_id").text(data['info']['_id']);
+            $("#std_lab_name").text(data['info']['name']);
+            $("#std_lab_sample").text(data['info'].sample);
+            $("#std_lab_method").text(data['info'].method);
+            initInfo(data, 'unit', 'txt_unit');
+            initInfo(data, 'range', 'txt_range');
+            initInfo(data, 'english_name', 'txt_english_name');
+            initInfo(data, 'sample', 'txt_std_sample');
+            initInfo(data, 'name', 'txt_std_name');
+            initInfo(data, 'method', 'txt_std_method');
+            initInfo(data, 'range', 'txt_range');
+            initInfo(data, 'class1', 'txt_class1');
+            initInfo(data, 'class2', 'txt_class2');
+            initInfo(data, 'qualitative_option', 'txt_option');
+            initInfo(data, 'item_sets', 'txt_item_set');
+            $("#std_lab_info").show();
+            var htmlobj = '';
+            htmlobj += '<div class="panel panel-warning">';
+            htmlobj += '   <div class="panel-heading">';
+            htmlobj += '     <h3 class="panel-title">已确认的同义词</h3></div';
+            htmlobj += '   <div class="panel-body"><ul class="list-unstyled"> ';
+            for (var i = 0; i < data['items'].length; i++)
+            {
+                htmlobj += '<li><dl>';
+                htmlobj += '<dt>样本名称:</dt><dd>' + data['items'][i].sample +'</dd>';
+                htmlobj += '<dt>指标名称:</dt><dd>' + data['items'][i].name +'</dd>';
+                htmlobj += '<dt>来源医院:</dt><dd>' + data['items'][i].source +'</dd>';
+                htmlobj += '<dt>出现的套餐:</dt><dd>' + data['items'][i].item_sets.join(",") +'</dd>';
+                htmlobj += '</dl></li>';
+            }
+            htmlobj += "   </ul></div>"; 
+            $("#labeled_div").html(htmlobj);
+        
+        }
+
+        function getLabList(){
+            clearLeft();
+             $.ajax({  
+                 type: "get",  
+                 async: false,  
+                 url: apiserver + '/lab/stdlist',  
+                 data: {},
+                 dataType: "json",  
+                 success: function(data){  
+                    var lab_list = data['value'];
+                    initNav(lab_list);
+                 },  
+                 error: function(){  
+                     alert('fail');  
+                 }  
+             }); 
+        }
+    
+        function initNav(lab_list) {
+            htmlobj = '';
+            for (var i = 0; i < lab_list.length; i++)
+            {
+                var marked = false;
+                if (lab_list[i]['marked']){
+                    marked = true;
+                }
+                if (marked){
+                    htmlobj += '<li class="lab_nav btn-info"><a href="#"><span class="lab_id">' + lab_list[i]['_id'] + '</span><span class="lab_name">' + lab_list[i]['name'] + '</span>(<span class="lab_sample">' + lab_list[i]['sample'] + '</span>)</a></li>';
+                }
+                else {
+                    htmlobj += '<li class="lab_nav"><a href="#"><span class="lab_id">' + lab_list[i]['_id'] + '</span><span class="lab_name">' + lab_list[i]['name'] + '</span>(<span class="lab_sample">' + lab_list[i]['sample'] + '</span>)</a></li>';
+                }
+            }
+            $('#lablist').html(htmlobj);
+            $('.lab_nav').click(function(){
+                var normal_id = $(this).find(".lab_id").text();
+                getLabelInfo(normal_id);
+            })
+        }
+
+        $(document).ready(function(){
+            getLabList();
+            $('#btn_refresh').click(function(){
+                getLabList();    
+            })
+            $("#btn_msg").hide();
+            $("#std_lab_info").hide();
+            $("#btn_delstd").click(function(e){
+                var id = $('#std_lab_id').text();
+                $.ajax({
+                    type: "get",
+                    async: false,
+                    url: apiserver + '/lab/delstd',
+                    data: {id: id},
+                    dataType: "json",
+                    success: function(data){
+                        alert('删除成功');
+                        delItem(id);
+                    },
+                    error: function(data){
+                        alert('删除失败');
+                    },
+                });
+            });
+            $("#btn_modifystd").click(function(e){
+                var req = {};
+                req['_id'] = $('#std_lab_id').text();
+                req['sample'] = $("#txt_std_sample").val();
+                req['name'] = $("#txt_std_name").val();
+                req['method'] = $("#txt_std_method").val();
+                req['unit'] = $("#txt_unit").val();
+                req['range'] = $('#txt_range').val();
+                req['qualitative_option'] = $('#txt_option').val();
+                req['class1'] = $('#txt_class1').val();
+                req['class2'] = $('#txt_class2').val();
+                req['item_sets'] = $('#txt_item_set').val();
+                req['english_name'] = $('#english_name').val();
+                 $.ajax({  
+                     type: "get",  
+                     async: false,  
+                     url: apiserver + '/lab/editstd',  
+                     data: req,
+                     dataType: "json",  
+                     success: function(data){  
+                        alert('修改成功');
+                     },  
+                     error: function(){  
+                         alert('fail');  
+                     }  
+                            
+                });
+
+            });
+        });
+    </script>
+  </body>
+</html>

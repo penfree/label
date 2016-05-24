@@ -3,5 +3,5 @@ sections:
       value:
         type: mongodb
         config:
-            uri: "mongodb://storage0.jd-bdmd.com:27017"
+            uri: "mongodb://mongo.dev-bdmd.com:27017"
 

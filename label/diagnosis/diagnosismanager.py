@@ -14,8 +14,12 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 import logging
 import json
+import re
 import string
+STD_DIAGNOSIS_COLLECTION = 'disease_standard'
+LABEL_DIAGNOSIS_COLLECTION = 'disease_label'
 
+order_pat = re.compile(ur'^\d+[\.、)）]')
 class DiagnosisGroup(object):
     '''
         诊断分组,同一个组内的诊断是同义词
@@ -67,18 +71,45 @@ class DiagnosisManager(object):
         self.marked_diagnosis = {}
 
         #获取待标注诊断列表
-        collection = mongo_client['label']['diagnosis']
+        collection = mongo_client['label'][LABEL_DIAGNOSIS_COLLECTION]
         for item in collection.find():
             self.diagnosis_list[item['_id']] = item
 
-        collection = mongo_client['label']['diagnosis_group']
+        collection = mongo_client['label'][STD_DIAGNOSIS_COLLECTION]
         for item in collection.find():
             group = DiagnosisGroup(item['_id'], item['diagnosis'], item['items'])
             self.diagnosis_groups[group.id] = group
             for diag in group.items:
                 self.marked_diagnosis[diag] = group
-            if group.id > self.max_group_id:
-                self.max_group_id = group.id
+        print 'diagnosis_group:%d' % len(self.diagnosis_groups)
+    
+    def quan2ban(self, ustr):
+        if not isinstance(ustr, unicode):
+            ustr = unicode(ustr)
+
+        rst = ''
+        for ch in ustr:
+            code = ord(ch)
+            if 0xFF01 <= code <= 0xFF5E :
+                code -= 0xFEE0
+            elif code == 0x3000: # 空格
+                code = 0x20
+            rst += unichr(code)
+        return rst 
+
+    def filter(self, item):
+        if item[0] == item[-1] and item[0] == '"':
+            item = item[1:-1].strip().replace('\t', ' ')
+        item = self.quan2ban(item)
+        if '?' in item:
+            return True
+        if u'待查' in item:
+            return True
+        if u'查因' in item:
+            return True
+        if order_pat.match(item):
+            return True
+        return False
 
     def buildIndex(self):
         '''
@@ -96,7 +127,7 @@ class DiagnosisManager(object):
                 self.diagIndex[ch].add(diag)
 
 
-    def mark(self, diagnosis, gid, syn_diag, mongo_client):
+    def mark(self, diagnosis, source, gid, syn_diag, mongo_client):
         '''
             标记诊断所属分组
             @param diagnosis: 诊断名称
@@ -122,7 +153,7 @@ class DiagnosisManager(object):
                 marked_group.remove(diagnosis)
                 changed_groups.append(marked_group)
             if gid is not None:
-                ngid = string.atoi(gid)
+                ngid = gid
                 self.diagnosis_groups[ngid].add(diagnosis)
                 changed_groups.append(self.diagnosis_groups[ngid])
                 self.marked_diagnosis[diagnosis] = self.diagnosis_groups[ngid]
@@ -133,20 +164,11 @@ class DiagnosisManager(object):
                     group.add(diagnosis)
                     changed_groups.append(group)
                 else:
-                    self.max_group_id += 1
-                    group = DiagnosisGroup(self.max_group_id, syn_diag, [syn_diag])
-                    group.add(diagnosis)
-                    self.diagnosis_groups[group.id] = group
-                    self.marked_diagnosis[diagnosis] = group
-                    self.marked_diagnosis[syn_diag] = group
-                    changed_groups.append(group)
+                    raise ValueError("target group is not specified")
             else:
-                self.max_group_id += 1
-                group = DiagnosisGroup(self.max_group_id, diagnosis, [diagnosis])
-                self.diagnosis_groups[group.id] = group
-                self.marked_diagnosis[diagnosis] = group
-                changed_groups.append(group)
+                raise ValueError('target group is not specified')
             self.update(changed_groups, mongo_client)
+            mongo_client['label'][LABEL_DIAGNOSIS_COLLECTION].update_one({'_id' : diagnosis}, {'$set' : {'mark_source' : source}})
         except Exception,e:
             logging.exception(e)
             return str(e)
@@ -155,11 +177,11 @@ class DiagnosisManager(object):
     def update(self, groups, mongo_client):
         for group in groups:
             if not group.items:
-                mongo_client['label']['diagnosis_group'].delete_one({'_id' : group.id})
+                mongo_client['label'][STD_DIAGNOSIS_COLLECTION].delete_one({'_id' : group.id})
                 del self.diagnosis_groups[group.id]
                 logging.info('delete group[%s] from mongodb' % group.id)
             else:
-                mongo_client['label']['diagnosis_group'].replace_one({'_id' : group.id}, group.dump(), upsert = True)
+                mongo_client['label'][STD_DIAGNOSIS_COLLECTION].replace_one({'_id' : group.id}, group.dump(), upsert = True)
                 logging.info('update group[%s] to mongodb[%s]' % (group.id, json.dumps(group.dump(), ensure_ascii = False)))
 
     def markGroup(self, gid, name, mongo_client):
@@ -180,6 +202,8 @@ class DiagnosisManager(object):
         for diag in self.diagnosis_list:
             if source != 'all' and source not in self.diagnosis_list.get(diag, {}).get('source', []):
                 continue
+            if self.filter(diag):
+                continue
             tmp[diag] = {}
             tmp[diag].update(self.diagnosis_list[diag])
             if diag in self.marked_diagnosis:
@@ -187,7 +211,7 @@ class DiagnosisManager(object):
         tmp = sorted([v for v in tmp.values()], key = lambda a: a.get('freq', 0), reverse = True)
         return tmp
 
-    def getLabelInfo(self, diagnosis):
+    def getLabelInfo(self, diagnosis, mongo_client):
         '''
             获取标注信息
         '''
@@ -224,12 +248,17 @@ class DiagnosisManager(object):
             groups = new_group
         else:
             groups = [ group.dump() for group in groups ]
+        
         result = {
             'key' : diagnosis,
             'groups' : groups,
             'source' : self.diagnosis_list.get(diagnosis, {}).get('source', []),
             'marked' : diagnosis in self.marked_diagnosis
         }
+        if result['marked']:
+            doc = mongo_client['label'][LABEL_DIAGNOSIS_COLLECTION].find_one({'_id' : diagnosis})
+            if doc and doc.get('mark_source'):
+                result['mark_source'] = doc['mark_source']
         return result
 
     def delete(self, diagnosis, mongo_client):
@@ -245,7 +274,7 @@ class DiagnosisManager(object):
         if diagnosis in self.diagnosis_list:
             del self.diagnosis_list[diagnosis]
 
-            collection = mongo_client['label']['diagnosis']
+            collection = mongo_client['label'][LABEL_DIAGNOSIS_COLLECTION]
             collection.delete_one({'_id' : diagnosis})
         self.update(changed_groups, mongo_client)
         return {'ret_code' : 'succ'}

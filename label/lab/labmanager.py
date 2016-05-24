@@ -15,6 +15,8 @@ sys.setdefaultencoding('utf-8')
 import json
 import string
 import logging
+STD_LAB_COLLECTION = 'bdmd_lab_standard'
+LABEL_LAB_COLLECTION = 'bdmd_lab_label'
 
 class StandardItem(object):
     '''
@@ -22,6 +24,8 @@ class StandardItem(object):
         样本+指标名称+检查方法唯一确定一个检验项目
     '''
     def __init__(self,  **kwargs):
+        #_id
+        self._id = kwargs['_id']
         #样本名称
         self.sample = kwargs.get('sample')
         #指标名称
@@ -36,14 +40,17 @@ class StandardItem(object):
         self.range = kwargs.get('range')
         #可选的定性描述取值
         self.qualitative_option = kwargs.get('qualitative_option')
-
-    def getKey(self):
-        key = '%s^%s^%s' % (self.sample, self.name, self.method)
-        return key
+        #一级分类
+        self.class1 = kwargs.get('class1')
+        #二级分类
+        self.class2 = kwargs.get('class2')
+        #英文名称
+        self.english_name = kwargs.get('english_name')
+        self.item_sets = kwargs.get('item_sets')
 
     def dump(self):
-        keys = ['sample', 'name', 'method', 'unit', 'range', 'qualitative_option']
-        obj = {"_id" : self.getKey()}
+        obj = {}
+        keys = ['_id', 'sample', 'name', 'method', 'unit', 'range', 'qualitative_option', 'class1', 'class2', 'english_name', 'item_sets']
         for key in keys:
             if self.__dict__.get(key) is not None:
                 obj[key] = self.__dict__.get(key)
@@ -53,30 +60,14 @@ class LabelItem(object):
     def __init__(self, doc):
         self._data = doc
 
-    def setStdItem(self, sample, name, method):
-        '''
-            添加可归一的标准词
-        '''
-        if self.normal_name == name and self.method == method:
-            if sample not in self.normal_sample:
-                self._data['normal_sample'].append(sample)
-        else:
-            self._data['normal_sample'] = [sample]
-            self._data['normal_name'] = name
-            self._data['method'] = method
+    def setStdItem(self, normal_item):
+        self._data['normal_id'] = normal_item._id
 
-    def removeStdItem(self, sample, name, method):
+    def removeStdItem(self):
         '''
             删除标准词
         '''
-        if self.normal_name == name and self.method == method:
-            self._data['normal_sample'].remove(sample)
-            if not self._data['normal_sample']:
-                del self._data['normal_name']
-                del self._data['method']
-        else:
-            raise ValueError('normal name not matched')
-        
+        del self._data['normal_id']
 
     def dump(self):
         tmp = {}
@@ -104,6 +95,7 @@ class LabManager(object):
         self.sample_list = {}
         #标准词到已标注项的映射
         self.std_item_map = {}
+        self.max_lab_id = -1
 
     def unicode(self, s):
         if not s:
@@ -126,6 +118,51 @@ class LabManager(object):
                 code = 0x20
             rst += unichr(code)
         return rst 
+
+    def addStdItem(self, std_item):
+        """
+            @Brief addStdItem 添加标准词到内存索引
+            @Param std_item:
+        """
+        if  std_item._id > self.max_lab_id:
+            self.max_lab_id = std_item._id
+        self.std_item_list[std_item._id] = std_item
+        if std_item.name not in self.item_index:
+            self.item_index[std_item.name] = []
+            for ch in std_item.name:
+                if ch not in self.char_index:
+                    self.char_index[ch] = set()
+                self.char_index[ch].add(std_item.name)
+        self.item_index[std_item.name].append(std_item)
+        self.std_item_map[std_item._id] = set()
+
+    def newStdItem(self, mongo_client, sample, name, method = u'缺省', **kwargs):
+        """
+            @Brief newStdItem 创建新的标准词
+            @Param mongo_client:
+            @Param sample: 样本名称
+            @Param name: 指标名称
+        """
+        self.max_lab_id += 1
+        std_item = StandardItem(_id = self.max_lab_id, sample = sample, name = name, method = method, **kwargs)
+        self.addStdItem(std_item)
+
+        collection = mongo_client['label'][STD_LAB_COLLECTION]
+        collection.replace_one({'_id' : std_item._id}, std_item.dump(), upsert = True)
+        return std_item
+
+    def findStdItem(self, sample, name, method = u'缺省'):
+        """
+            @Brief findStdItem 查找标准词
+            @Param sample:
+            @Param name:
+            @Param method:
+        """
+        if name in self.item_index:
+            for item in self.item_index.get(name):
+                if item.sample == sample and item.method == method:
+                    return item
+        return None
     
     def loadData(self, client):
         '''
@@ -143,7 +180,11 @@ class LabManager(object):
         self.sample_list = {}
         #标准词到已标注项的映射
         self.std_item_map = {}
-        collection = client['label']['lab']
+        collection = client['label'][STD_LAB_COLLECTION]
+        for doc in collection.find():
+            std_item = StandardItem(**doc)
+            self.addStdItem(std_item)
+        collection = client['label'][LABEL_LAB_COLLECTION]
         for doc in collection.find():
             lab_item = LabelItem(doc)
             if not lab_item.sample or not lab_item.name:
@@ -151,37 +192,8 @@ class LabManager(object):
                 continue
             key = (lab_item.sample, lab_item.name, lab_item.source)
             self.label_item_list[key] = lab_item
-            if lab_item.normal_name and lab_item.method:
-                for sample in lab_item.normal_sample:
-                    key = '%s^%s^%s' % (sample, lab_item.normal_name, lab_item.method)
-                    if key not in self.std_item_map:
-                        self.std_item_map[key] = set()
-                    self.std_item_map[key].add((lab_item.sample, lab_item.name, lab_item.source))
-
-        collection = client['label']['std_lab']
-        for doc in collection.find():
-            std_item = StandardItem(**doc)
-            key = std_item.getKey()
-            if key not in self.std_item_map:
-                self.delStdItem(std_item, client)
-                continue
-            self.std_item_list[key] = std_item
-            if std_item.name not in self.item_index:
-                self.item_index[std_item.name] = []
-            self.item_index[std_item.name].append(std_item)
-
-        for item_name in self.item_index:
-            for ch in item_name:
-                if ch not in self.char_index:
-                    self.char_index[ch] = set()
-                self.char_index[ch].add(item_name)
-
-
-        collection = client['label']['lab_sample']
-        for doc in collection.find():
-            sample = doc['_id']
-            self.sample_list[sample] = doc
-
+            if lab_item.normal_id is not None:
+                self.std_item_map[lab_item.normal_id].add((lab_item.sample, lab_item.name, lab_item.source))
 
     def getLabList(self, source):
         '''
@@ -189,12 +201,14 @@ class LabManager(object):
         '''
         result = []
         if not source:
-            result = sorted([item.dump() for item in self.label_item_list.values()], key = lambda a:a.get('freq', 0), reverse = True)
+            result = sorted([item.dump() for item in self.label_item_list.values() if not item.freq or item.freq > 50], key = lambda a:a.get('freq', 0), reverse = True)
         else:
-            result = sorted([item.dump() for item in self.label_item_list.values() if item.source == source], key = lambda a:a.get('freq', 0), reverse = True)
+            result = sorted([item.dump() for item in self.label_item_list.values() if item.source == source and (not item.freq or item.freq > 50) ], key = lambda a:a.get('freq', 0), reverse = True)
         for item in result:
-            if item.get('normal_name'):
+            if item.get('normal_id') is not None:
                 item['marked'] = True
+            if len(item.get('item_sets', [])) > 10:
+                item['item_sets'] = item['item_sets'][:10]
         return result
 
     def calSim(self, s1, s2):
@@ -222,14 +236,18 @@ class LabManager(object):
 
         item_count = {}
         for ch in item_name:
+            if ch == '(' or ch == ')':
+                continue
             if ch in self.char_index:
                 for item in self.char_index[ch]:
                     if item not in item_count:
                         item_count[item] = 0
+                    if ord(ch) > 0xff:
+                        item_count[item] += 2.0 / (len(item) + len(item_name))
                     else:
                         item_count[item] += 1.0 / (len(item) + len(item_name))
-        if label_item.normal_name:
-            item_count[label_item.normal_name] = 9999999
+        if label_item.normal_id is not None:
+            item_count[self.std_item_list[label_item.normal_id].name] = 9999999
         item_count = sorted([(k, v) for k, v in item_count.iteritems()], key = lambda a: -a[1])[:50]
         result = []
         for item, _ in item_count:
@@ -239,10 +257,12 @@ class LabManager(object):
                 continue
             sample_list = sorted([(std_item.sample, std_item.method, self.calSim(sample, std_item.sample)) for std_item in std_item_list], key = lambda a:-a[2])
             sample_list = [{'sample' : a[0], 'method' : a[1]} for a in sample_list]
-            if label_item.normal_name == item:
-                for it in sample_list:
-                    if it.get('sample') in label_item.normal_sample and it.get('method') == label_item.method:
-                        it['marked'] = True
+            if label_item.normal_id is not None:
+                normal_item = self.std_item_list[label_item.normal_id]
+                if normal_item.name == item:
+                    for it in sample_list:
+                        if it.get('sample') == normal_item.sample and it.get('method') == normal_item.method:
+                            it['marked'] = True
             result.append({
                 'name' : item,
                 'info' : sample_list
@@ -251,39 +271,38 @@ class LabManager(object):
             'cands' : result,
             'info' : label_item.dump()
         }
+        if len(result['info'].get('item_sets', [])) > 10:
+            result['info']['item_sets'] = sorted(result['info']['item_sets'], key = lambda a: -a[1] if a  and isinstance(a, tuple) else 0)[:20]
 
         return result
 
-    def markLab(self, sample, item_name, source, nsample, nitem_name, method, mongo_client):
+    def markLab(self, sample, item_name, source, nid, nsample, nitem_name, method, mongo_client):
         '''
             标记标准词
         '''
-        sample = self.unicode(sample)
-        item_name = self.unicode(item_name)
         nsample = self.unicode(nsample)
         nitem_name = self.unicode(nitem_name)
         method = self.unicode(method)
+        if isinstance(nid, basestring):
+            nid = string.atoi(nid)
         if not method:
             method = u'缺省'
 
         std_item = None
-        if not nsample and not nitem_name:
-            std_item = self.editStdItem(mongo_client, sample, item_name, u'缺省')
+        #未指定标准词时创建标准词
+        if nid is not None:
+            std_item = self.std_item_list[nid]
+        elif not nsample and not nitem_name:
+            std_item = self.newStdItem(mongo_client, sample, item_name, u'缺省')
             nsample, nitem_name, method = std_item.sample, std_item.name, std_item.method
         else:
-            key = '%s^%s^%s' % (nsample, nitem_name, method)
-            if key not in self.std_item_list:
-                std_item = self.editStdItem(mongo_client, nsample, nitem_name, method)
-                nsample, nitem_name, method = std_item.sample, std_item.name, std_item.method
-            else:
-                std_item = self.std_item_list[key]
-
-        if nsample and nsample not in self.sample_list:
-            self.addSample(nsample, mongo_client)
-
-        if not sample or not item_name or not nsample or not nitem_name or not method:
+            #指定的标准词不存在时创建标准词
+            std_item = self.findStdItem(nsample, nitem_name, method)
+            if not std_item:
+                std_item = self.newStdItem(mongo_client, nsample, nitem_name, method)
+        if not sample or not item_name:
             raise ValueError('bad param')
-        logging.info('mark %s (%s), source[%s] to %s (%s)(%s)' % (item_name, sample, source, nitem_name, nsample, method))
+        logging.info('mark %s (%s), source[%s] to %s (%s)(%s)' % (item_name, sample, source, std_item.name, std_item.sample, std_item.method))
 
         key = (sample, item_name, source)
         if key not in self.label_item_list:
@@ -291,62 +310,34 @@ class LabManager(object):
         label_item = self.label_item_list[key]
         self.setStdItem(label_item, std_item)
         self.updateLabel(label_item, mongo_client)
-        logging.info('parent of [%s]: %s' % (nsample, ','.join(self.sample_list[nsample].get('parent', []))))
-        for item in self.sample_list[nsample].get('parent', []):
-            #若父样本组成的指标存在,则也标记到父样本上
-            #if item not in label_item.normal_sample and (item, nitem_name, method) in self.std_item_list:
-            #同时标记到父样本上
-            logging.info('label_item.normal_sample:%s' % ','.join(label_item.normal_sample))
-            if item not in label_item.normal_sample:
-                self.markLab(sample, item_name, source, item, nitem_name, method, mongo_client)
 
     def setStdItem(self, label_item, std_item):
         '''
             设置标准词
         '''
-        if label_item.normal_name == std_item.name and label_item.method == std_item.method:
-            self.std_item_map[std_item.getKey()].add((label_item.sample, label_item.name, label_item.source))
-        elif not label_item.normal_name or not label_item.normal_sample:
-            self.std_item_map[std_item.getKey()].add((label_item.sample, label_item.name, label_item.source))
+        if label_item.normal_id is None or label_item.normal_id == std_item._id:
+            self.std_item_map[std_item._id].add((label_item.sample, label_item.name, label_item.source))
         else:
-            for sample in label_item.normal_sample:
-                key = '%s^%s^%s' % (sample, label_item.normal_name, label_item.method)
-                self.std_item_map[key].remove((label_item.sample, label_item.name, label_item.source))
-            self.std_item_map[std_item.getKey()].add((label_item.sample, label_item.name, label_item.source))
-        label_item.setStdItem(std_item.sample, std_item.name, std_item.method)
+            self.std_item_map[label_item.normal_id].remove((label_item.sample, label_item.name, label_item.source))
+            self.std_item_map[std_item._id].add((label_item.sample, label_item.name, label_item.source))
+        label_item.setStdItem(std_item)
     
-    def addSample(self, sample, mongo_client):
-        '''
-            添加新样本
-        '''
-        sample = self.unicode(sample)
-        doc = {'_id' : sample, 'parent' : []}
-        self.sample_list[sample] = doc
-        collection = mongo_client['label']['lab_sample']
-        collection.insert_one(doc)
-
-    def mark(self, sample, item_name, source, nsample, nitem_name, method, mongo_client):
-        self.markLab(sample, item_name, source, nsample, nitem_name, method, mongo_client)
+    def mark(self, sample, item_name, source, nid, nsample, nitem_name, method, mongo_client):
+        self.markLab(sample, item_name, source, nid, nsample, nitem_name, method, mongo_client)
         return self.getLabelInfo(sample, item_name, source)
 
     def updateLabel(self, label_item, mongo_client):
         '''
             将标注结果写入mongodb
         '''
-        collection = mongo_client['label']['lab']
+        collection = mongo_client['label'][LABEL_LAB_COLLECTION]
         collection.replace_one({'_id' : label_item._id}, label_item.dump(), upsert = True)
 
     def unmark(self, sample, item_name, source, nsample, nitem_name, method, mongo_client):
         '''
             取消标记
         '''
-        sample = self.unicode(sample)
-        item_name = self.unicode(item_name)
-        nsample = self.unicode(nsample)
-        nitem_name = self.unicode(nitem_name)
-        method = self.unicode(method)
-
-        if not sample or not item_name or not nsample or not nitem_name or not method:
+        if not sample or not item_name:
             raise ValueError('bad param')
         logging.info('unmark %s (%s),   %s-%s-%s' % (item_name, sample, nsample, nitem_name, method))
 
@@ -354,111 +345,93 @@ class LabManager(object):
         if key not in self.label_item_list:
             raise ValueError('key not found')
         label_item = self.label_item_list[key]
-        label_item.removeStdItem(nsample, nitem_name, method)
+        if label_item.normal_id is not None:
+            self.std_item_map[label_item.normal_id].remove((label_item.sample, label_item.name, label_item.source))
+        
+        label_item.removeStdItem()
         self.updateLabel(label_item, mongo_client)
         return self.getLabelInfo(sample, item_name, source)
 
-    def editStdItem(self, mongo_client, sample, name, method, **kwargs):
+    def editStdItem(self, mongo_client, **kwargs):
         '''添加或编辑标准词
         '''
-        sample = self.unicode(sample)
-        name = self.unicode(name)
-        method = self.unicode(method)
-        if not method:
-            method = u'缺省'
-        name = self.quan2ban(name)
-        key = '%s^%s^%s' % (sample, name, method)
-        if key not in self.std_item_map:
-            self.std_item_map[key] = set()
-        if key in self.std_item_list:
-            std_item = self.std_item_list[key]
+        if '_id' in kwargs:
+            nid = kwargs['_id']
+            if isinstance(nid, basestring):
+                nid = string.atoi(nid)
+        else:
+            nid = None
+        params = {}
+        params.update(kwargs)
+        if 'name' in params: params['name'] = self.quan2ban(params['name'])
+        if nid is not None:
+            std_item = self.std_item_list[nid]
+        elif params.get('sample') and params.get('name'):
+            std_item = self.findStdItem(params.get('sample'), params.get('name'),params.get('method', u'缺省'))
+            if not std_item:
+                std_item = self.newStdItem(mongo_client, params.get('sample'), 
+                                params.get('name'), params.get('method', u'缺省'), **kwargs)
+        else:
+            raise ValueError('cannot find match item')
+        name_changed = False
+        if std_item:
             for k,v in kwargs.iteritems():
-                if k in ['sample', 'name', 'method']:
+                if k == '_id':
                     continue
+                if k == 'name' and v != std_item.name and nid is not None:
+                    name_changed = True
                 if v:
                     setattr(std_item, k, v)
-        else:
-            std_item = StandardItem(sample = sample, name = name, method = method, **kwargs)
-            if std_item.name not in self.item_index:
-                self.item_index[std_item.name] = [std_item]
-            else:
-                self.item_index[std_item.name].append(std_item)
-            for ch in name:
-                if ch not in self.char_index:
-                    self.char_index[ch] = set()
-                self.char_index[ch].add(name)
-            self.std_item_list[key] = std_item
-        collection = mongo_client['label']['std_lab']
-        collection.replace_one({'_id' : key}, std_item.dump(), upsert = True)
+        collection = mongo_client['label'][STD_LAB_COLLECTION]
+        collection.replace_one({'_id' : std_item._id}, std_item.dump(), upsert = True)
+        if name_changed:
+            self.loadData(mongo_client)
         return std_item
 
-    def addSampleParent(self, sample, parent, mongo_client):
-        '''
-            添加上位样本
-        '''
-        sample = self.unicode(sample)
-        parent = self.unicode(parent)
-        collection = mongo_client['label']['lab_sample']
-        if sample not in self.sample_list:
-            self.addSample(sample, mongo_client)
-        if parent not in self.sample_list[sample]['parent']:
-            self.sample_list[sample]['parent'].append(parent)
-            collection.update_one({'_id' : sample}, { '$addToSet': { 'parent': parent }}, upsert = True);
-        return self.getSampleList()
 
-    def removeSampleParent(self, sample, parent, mongo_client):
-        '''
-            移除上位样本
-        '''
-        sample = self.unicode(sample)
-        parent = self.unicode(parent)
-        collection = mongo_client['label']['lab_sample']
-        if sample not in self.sample_list:
-            return
-        if parent in self.sample_list[sample]['parent']:
-            self.sample_list[sample]['parent'].remove(parent)
-            collection.replace_one({'_id' : sample}, self.sample_list[sample]['parent'], upsert = True);
-        return self.getSampleList()
+    def delStdItem(self, id, mongo_client):
+        """
+            @Brief delStdItem 删除标准词
+            @Param id:
+            @Param mongo_client:
+        """
+        collection = mongo_client['label'][LABEL_LAB_COLLECTION]
+        doc = collection.find_one({'normal_id' : id})
+        if doc:
+            raise ValueError('%s marked to this std item' % json.dumps(doc, ensure_ascii = False))
+        collection = mongo_client['label'][STD_LAB_COLLECTION]
+        collection.delete_one({'_id' : id})
+        self.loadData(mongo_client)
 
-    def getSampleList(self):
-        '''
-            获取样本列表
-        '''
-        sample_list = [{'sample' : item['_id'], 'parent' : item['parent']} for item in self.sample_list.values()]
-        revert_list = {}
-        for item in sample_list:
-            for parent in item['parent']:
-                if parent not in revert_list:
-                    revert_list[parent] = {'sample' : parent, 'children' : []}
-                if item['sample'] not in revert_list[parent]['children']: revert_list[parent]['children'].append(item['sample'])
-        for item in sample_list:
-            item['children'] = revert_list.get(item['sample'], {}).get('children', [])
-        return sample_list
-
-    def delStdItem(self, std_item, mongo_client):
-        collection = mongo_client['label']['std_lab']
-        key = std_item.getKey()
-        collection.delete_one({'_id' : key})
-
-    def getStdItem(self, sample, name, method):
+    def getStdItem(self, sample, name, method, id = None):
         '''
             获取标准词及其属性
         '''
-        sample = self.unicode(sample)
-        name = self.unicode(name)
-        method = self.unicode(method)
-
-        if not sample or not name or not method:
+        if id is not None:
+            std_item = self.std_item_list[id]
+        elif not sample or not name or not method:
             raise ValueError('param error')
-
-        key = '%s^%s^%s' % (sample, name, method)
-        if key not in self.std_item_list:
-            raise ValueError('cannot find item')
+        else:
+            std_item = self.findStdItem(sample, name, method)
 
         result = {}
-        result['info'] = self.std_item_list[key].dump()
+        result['info'] = std_item.dump()
         result['items'] = []
-        for item in self.std_item_map.get(key, []):
+        for item in self.std_item_map.get(std_item._id, []):
             label_item = self.label_item_list[item]
-            result['items'].append(label_item.dump())
+            obj = label_item.dump()
+            obj['item_sets'] = sorted(obj['item_sets'], key = lambda a: -a[1] if a and isinstance(a, tuple) else 0)[:20]
+            result['items'].append(obj)
+        return result
+
+    def getStdItemList(self, mongo_client):
+        """
+            @Brief getStdItemList 获取标准词列表
+            @Param mongo_client:
+        """
+        result = []
+        for id, item in self.std_item_list.iteritems():
+            tmp = item.dump()
+            tmp['marked'] = True if self.std_item_map.get(id) else False
+            result.append(tmp)
         return result

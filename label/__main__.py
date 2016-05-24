@@ -27,6 +27,7 @@ from configmslib import ConfigRepository
 from unifiedrpc import Server, CONFIG_RESPONSE_MIMETYPE, CONFIG_RESPONSE_CONTENT_CONTAINER
 from unifiedrpc.content.container import APIContentContainer
 from unifiedrpc.adapters.web import GeventWebAdapter
+from baselib.web.unifiedrpc import SystemMetaResolver
 
 from argparse import ArgumentParser
 from unifiedrpc import context
@@ -40,7 +41,7 @@ def getArguments():
     """
     parser = ArgumentParser(description = 'label platform micro service')
     parser.add_argument('--host', dest = 'host', default = '0.0.0.0', help = 'The binding host')
-    parser.add_argument('--port', dest = 'port', type = int, default = 18001, help = 'The binding port')
+    parser.add_argument('--port', dest = 'port', type = int, default = 19001, help = 'The binding port')
     parser.add_argument('--debug', dest = 'debug', default = False, action = 'store_true', help = 'Enable debug')
     parser.add_argument('--config', dest = 'config', required = True, help = 'The config schema file')
     # Done
@@ -75,19 +76,15 @@ def main():
     configs = ConfigRepository()
     configs.loadSchema(config_file)
     # Create the server
-    Server.initResponse = initResponse
-    server = Server([DiagnosisService(configs), DrugService(configs)],
-        **{
+    server = Server([DiagnosisService(configs), DrugService(configs), LabService(configs)], [ GeventWebAdapter(args.host, args.port) ],
+        {
         CONFIG_RESPONSE_MIMETYPE: mime.APPLICATION_JSON,
         CONFIG_RESPONSE_CONTENT_CONTAINER: APIContentContainer
         })
-        #server.addAdapter(GeventWebAdapter('web', args.host, args.port))
-    # Add services
-    #server.addService(DiagnosisService(configs))
-    #server.addService(DrugService(configs))
     # Start server
     #server.start()
-    server.start([ GeventWebAdapter('web', args.host, args.port) ], runtimeInitializer = lambda rt: addContextHandlers(rt))
+    server._stage.addPreRequest(SystemMetaResolver())
+    server.forever()
 
 try:
     sys.exit(main())

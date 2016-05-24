@@ -40,9 +40,9 @@
               <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-haspopup="true" aria-expanded="false">医院<span class="caret"></span></a>
               <ul class="dropdown-menu hosp-alias">
                 <li class="active" ><a href="#">all</a></li>
-                <li><a href="#">xiangya1</a></li>
+                <li><a href="#">gd2h</a></li>
                 <li><a href="#">gyfyy</a></li>
-                <li><a href="#">fssy</a></li>
+                <li><a href="#">ysph</a></li>
               </ul>
             </li>
             <li>
@@ -76,6 +76,7 @@
                         <input type="text" class="form-control" placeholder="诊断名,为空则独立成组" id="specified_group">
                         <button type="button" class="btn btm-lg btn-info" id='join_group'>加入组</button>
                         <button type="button" class="btn btm-lg btn-info" id='btn_del'>删除</button>
+                        <small id='last_mark_source'></small>
                     </div>
                 </li>
               </ul>
@@ -92,7 +93,7 @@
     <script src="//cdn.bootcss.com/jquery/1.11.3/jquery.min.js"></script>
     <script src="//cdn.bootcss.com/bootstrap/3.3.5/js/bootstrap.min.js"></script>
     <script>
-        var apiserver = 'http://192.168.2.11:18001';
+        var apiserver = '/_api';
         var all_diagnosis = new Array();
         function setMarked(diag){
             $("li.diag_nav :contains('" + diag + "')").map(
@@ -129,6 +130,12 @@
             for (var i = 0; i < data['value']['source'].length; i++){
                 $("#curr_diagnosis_info").append('<span class="label label-warning">'+ data['value']['source'][i] +'</span>');
             }
+            if (data['value']['mark_source']){
+                $("#last_mark_source").html('最后标记:<span class="label label-warning">'+ data['value']['mark_source'] +'</span>');    
+            }
+            else{
+                $("#last_mark_source").html('');
+            }
             htmlobj = ''
             for (var i = 0; i < groups.length; i++)
             {
@@ -157,11 +164,12 @@
                 getLabelInfo(this.innerText);
             })
             $('.mark_group').click(function(){
+                var source = $("ul.hosp-alias > li.active").children("a").text();
                  $.ajax({  
                      type: "get",  
                      async: false,  
                      url: apiserver + '/diagnosis/mark',  
-                     data: {'gid' : this.id, 'diag' : $('#curr_diagnosis').text()},
+                     data: {'gid' : this.id, 'diag' : $('#curr_diagnosis').text(), 'source' : source},
                      dataType: "json",  
                      success: function(data){  
                         setMarked($('#curr_diagnosis').text());
@@ -268,11 +276,12 @@
                 getDiagList();    
             })
             $('#join_group').click(function(){
+                var source = $("ul.hosp-alias > li.active").children("a").text();
                  $.ajax({  
                      type: "get",  
                      async: false,  
                      url: apiserver + '/diagnosis/mark',  
-                     data: {'diag' : $('#curr_diagnosis').text(), 'syn_diag' : $('#specified_group').val()},
+                     data: {'diag' : $('#curr_diagnosis').text(), 'syn_diag' : $('#specified_group').val(), 'source' : source},
                      dataType: "json",  
                      success: function(data){  
                         setMarked($('#curr_diagnosis').text());

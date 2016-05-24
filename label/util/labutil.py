@@ -17,36 +17,44 @@ from argparse import ArgumentParser
 import json
 import string
 import logging
+STD_LAB_COLLECTION = 'bdmd_lab_standard'
+LABEL_LAB_COLLECTION = 'bdmd_lab_label'
 
 class LabUtil(object):
     def __init__(self, url):
         self.client = MongoClient(url)
+
+    def getStdItem(self, data_file):
+        collection = self.client['label'][STD_LAB_COLLECTION]
+        with open(data_file, 'w') as df:
+            for doc in collection.find():
+                print >>df, json.dumps(doc, ensure_ascii = False)
     
-    def genDict(self, data_file,source):
-        collection = self.client['label']['lab']
+    def genDict(self, data_file):
+        collection = self.client['label'][LABEL_LAB_COLLECTION]
         count = 0
+        item_list = {}
+        for item in collection.find():
+            if item.get('normal_id'):
+                item_list[(item['source'], item['name'], item['sample'])] = item['normal_id']
+        collection = self.client['label'][STD_LAB_COLLECTION]
         with open(data_file, 'w') as df:
-            for item in collection.find({'source' : source}):
-                if item.get('normal_name') and item.get('normal_sample') and item.get('method'):
-                    tmp = {}
-                    tmp['name'] = item['name']
-                    tmp['sample'] = item['sample']
-                    tmp['normal_name'] = item['normal_name']
-                    tmp['normal_sample'] = item['normal_sample']
-                    tmp['method'] = item['method']
-                    df.write('%s\n' % json.dumps(tmp, ensure_ascii = False))
-                    count += 1
-
-        logging.info('%d item is dumped' % count)
-
-    def genSampleDict(self, data_file):
-        collection = self.client['label']['lab_sample']
-        with open(data_file, 'w') as df:
-            for item in collection.find():
-                tmp = {'sample' : item['_id'], 'parent' : item.get('parent', [])}
-                df.write('%s\n' % json.dumps(tmp, ensure_ascii = False))
-
-
+            for source, name, sample in item_list:
+                normal_id = item_list[(source, name, sample)]
+                doc = collection.find_one({'_id' : normal_id})
+                if not doc:
+                    logging.warn('normal_id[%d] not found' % normal_id)
+                    continue
+                else:
+                    obj = {
+                        'source' : source,
+                        'name' : name,
+                        'sample' : sample,
+                        'normal_name' : doc['name'],
+                        'normal_sample' : doc['sample'],
+                        'method' : doc['method']
+                    }
+                    print >>df, json.dumps(obj, ensure_ascii = False)
 
     def addLabelData(self, data_file, source):
         '''
@@ -54,11 +62,13 @@ class LabUtil(object):
             @param data_file: 输入文件, 每行一个json
                               json需要包含sample, name, freq字段, 其他字段用于帮助标注
         '''
-        collection = self.client['label']['lab']
+        collection = self.client['label'][LABEL_LAB_COLLECTION]
         count = 0
         with open(data_file) as df:
             for line in df:
                 obj = json.loads(line)
+                if obj.get('freq') < 50:
+                    continue
                 data = {}
                 for k in obj:
                     if isinstance(obj[k], basestring):
@@ -66,11 +76,9 @@ class LabUtil(object):
                 data.update(obj)
                 data['source'] = source
                 data['_id'] = '%s+%s+%s' % (obj['sample'], obj['name'], source)
-                doc = collection.find_one({'sample' : obj['sample'], 'name' : obj['name'], 'normal_name' : {'$ne' : None}})
+                doc = collection.find_one({'sample' : obj['sample'], 'name' : obj['name'], 'normal_id' : {'$exists' : True}})
                 if doc:
-                    data['normal_name'] = doc['normal_name']
-                    data['normal_sample'] = doc['normal_sample']
-                    data['method'] = doc['method']
+                    data['normal_id'] = doc['normal_id']
                 collection.replace_one({'_id' : data['_id']}, data, upsert = True)
                 count += 1
                 print '\r%d' % count,
@@ -80,7 +88,7 @@ def getArguments():
     """Get arguments
     """
     parser = ArgumentParser(description = 'label platform micro service')
-    parser.add_argument('--host', dest = 'host', default = 'storage0.jd-bdmd.com', help = 'The mongodb server')
+    parser.add_argument('--host', dest = 'host', default = 'mongo', help = 'The mongodb server')
     parser.add_argument('--port', dest = 'port', type = int, default = 27017, help = 'The mongodb port')
     parser.add_argument('--file', '-f', dest = 'file', required = True, help = '')
     parser.add_argument('--cmd', '-c', dest = 'cmd',required = True)
@@ -98,8 +106,6 @@ if __name__=='__main__':
             raise ValueError('source must be specified')
         tool.addLabelData(args.file, args.source)
     elif args.cmd == 'gendict':
-        if not args.source:
-            raise ValueError('source must be specified')
-        tool.genDict(args.file, args.source)
-    elif args.cmd == 'gensampledict':
-        tool.genSampleDict(args.file)
+        tool.genDict(args.file)
+    elif args.cmd == 'getstd':
+        tool.getStdItem(args.file)
